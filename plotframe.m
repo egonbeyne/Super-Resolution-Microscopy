@@ -1,3 +1,5 @@
+
+
 % Opening the raw .tif image
 dir = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\00002.tif';
 t = Tiff(dir, 'r');

@@ -39,12 +39,14 @@ dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
 %plotting segments
 imshow(uint16(imageData)*100, 'InitialMagnification', 'fit');
 hold on
+axis on
 plot(centroids(:,1), centroids(:,2), 'b*')
+plot(xs/a, ys/a, 'r+', 'MarkerSize', 8, 'LineWidth', 1);
 bsize = 10;
 N = length(centroids(:,1));
 for i = 1:N
     rectangle('Position', [centroids(i,1)-bsize/2, centroids(i,2)-bsize/2, bsize, bsize],'EdgeColor','r')
-    plot(xs(i)/a , ys(i)/a , 'r+', 'MarkerSize', 8, 'LineWidth', 1);
+    
 end
 hold off
 
@@ -76,14 +78,13 @@ yi = d(:, 2);
 
 % Coordinates for the origin of the local coordinate system in each region
 % of interest
-origin = round(centroids - [xlen/2, ylen/2]);
+origin = round(centroids) - [xlen/2, ylen/2];
 
 L = size(centroids);
 
 for i = 1:L(1)
     
-    
-    % Extract coordinates of the origin of one regionof interest
+    % Extract coordinates of the origin of one region of interest
     roi = origin(i, :);
        
     % Select pixel data in the region of interest
@@ -92,6 +93,7 @@ for i = 1:L(1)
     % rearranging ROI
     Ii  = transpose(localData);
     I = Ii(:);
+    
 
     % Calculating the weights (assuming poissoning noise, based on
     % (Jiaqing,2016))
@@ -112,13 +114,20 @@ for i = 1:L(1)
     % Fitting parameters [xs, ys, sigma, Intensity]
     param = coeffvalues(LS);
     
-    xs  = param(1) + roi(1);
-    ys  = param(2) + roi(2);
+    xs  = param(1) + roi(1) - 1; % +1 is necessary because pixel count starts at one in the local frame
+    ys  = param(2) + roi(2) - 1;
     sg  = param(3);
     b   = param(5);
     
     localizations = [localizations; [xs, ys, sg, b]];
     
+    % Plot the ROI and estimated location
+    imshow(uint16(localData)*100, 'InitialMagnification', 'fit');
+    axis on
+    hold on
+    plot(param(1) , param(2) , 'r+', 'MarkerSize', 8, 'LineWidth', 1);
+    
+
     
 end
 

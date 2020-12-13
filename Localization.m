@@ -29,6 +29,9 @@ tau   = 2*pi*(sigg^2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless b
 % Cramer rao lower bound
 dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
 
+% Compare the results to the ground truth
+comp = groundtruth(localizations)
+
 % Plot the ROI and estimated location
 %imshow(uint16(ROI)*100, 'InitialMagnification', 'fit');
 %axis on
@@ -109,7 +112,7 @@ for i = 1:L(1)
         'Algorithm', 'Trust-Region',...
         'weight', w,...
         'TolX', [10^-2],...
-        'MaxIter', 50);
+        'MaxIter', 5);
 
     % Fitting parameters [xs, ys, sigma, Intensity]
     param = coeffvalues(LS);
@@ -127,49 +130,34 @@ end
 
 end
 
+function [comp] = groundtruth(localizations)
+% Open the csv file with ground truth
+GT = readmatrix('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\00002.csv');
+
+% Select the position ground truth
+pos = GT(:, 3:4);
+
+% Sort the result, such that the same points are compared
+sort = sortrows(pos, 1);
+
+% Select the position only 
+pos_loc = localizations(:, 1:2);
+
+% Sort the localization and convert to nm
+loc  = sortrows(pos_loc, 1)*150;
+
+% Calculate the squared error
+rsq  = (sort - loc).^2;
+
+L_rsq = size(rsq)
+
+% Compute the mean squared error
+comp = sum(sqrt(rsq))/L_rsq(1);
+
+
+end
 
 
 
 
-%{
-% Make a grid of the local coordinates in the region of interest
-[ylen, xlen] = size(ROI);
-
-X = linspace(1, xlen, xlen);
-Y = linspace(1, ylen, ylen);
-
-% Grid coordinates for every point in the ROI
-[Xi, Yi] = meshgrid(X, Y);
-
-% Making a 2 dimensional array for all points in the grid
-c = cat(2,Xi',Yi');
-d = reshape(c,[],2);
-
-xi = d(:, 1);
-yi = d(:, 2);
-
-% rearranging ROI
-Ii  = transpose(ROI);
-I = Ii(:);
-
-% Calculating the weights (assuming poissoning noise, based on (Jiaqing,2016)
-w = max(I.^-1, .005);
-
-% Define a point spread function
-PSF = @(xs, ys, sg, int, b, x, y)...
-        (((int/(2*pi*sg^2))*exp(-((x-xs).^2 + (y-ys).^2)/(2*sg^2)))+b);
-
-% Weighted least squares
-LS = fit([xi, yi], I, PSF, 'startpoint', [5,5,1,5000, 1], 'lower', [0, 0, 0, 0, 0], ...
-    'Robust', 'LAR',...
-    'Algorithm', 'Trust-Region',...
-    'weight', w,...
-    'TolX', 10^-5,...
-    'MaxIter', 100);
-
-% Fitting parameters [xs, ys, sigma, Intensity]
-param = coeffvalues(LS);
-
-
-%}
 

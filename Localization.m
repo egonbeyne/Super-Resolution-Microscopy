@@ -1,42 +1,41 @@
-% Opening the raw .tif image
-dir = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\00002.tif';
-t = Tiff(dir, 'r');
+% Constants
+a           = 150e-9;   % [m] Pixel size
+xsize       = 4;
+ysize       = 4;
+sensitivity = 0.7; %threshold value in between the average and maximum intensity (sens = [0,1])
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
+GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
+Nfiles      = 31; %Number of datafiles
+for iter = 1:Nfiles
 
-% Reading the image
-imageData = double(read(t));
+    
+% Open the image
+imageData = OpenIm(dataLoc, iter);
 
-% Performing a linear stretch
-stretch = imageData;
-
-% Manually selecting a region of interest
-ROI  = stretch(136:145, 108:115);
+% Segmenting the data
+centroids = segment_frame(imageData,sensitivity);
 
 % Localization
-localizations = Fit_Gaussian(centroids, imageData);
-
-a     = 150e-9;                                  % [m] Pixel size
+localizations = Fit_Gaussian(centroids, imageData, xsize, ysize);
 
 xs = localizations(:, 1)*a;
 ys = localizations(:, 2)*a;
 
 % Cramer-Rao lower bound calculation
 
-N     = sum(imageData, 'all');               % [-] Number of signal photons (here per molecule, not sure  if this is correct)
+N     = sum(imageData, 'all');               % [-] Number of signal photons 
 sigg  = mean(localizations(3))*a;                              % Converting std. of PSF to m from pixels
-sige2 = (sigg^2) + (a^2/12);         
+sige2 = (sigg^2) + ((a^2)/12);         
 tau   = 2*pi*(sigg^2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
 
 % Cramer rao lower bound
 dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
 
-% Compare the results to the ground truth
-comp = groundtruth(localizations)
+% Mortensen lower bound
+dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N);
 
-% Plot the ROI and estimated location
-%imshow(uint16(ROI)*100, 'InitialMagnification', 'fit');
-%axis on
-%hold on
-%plot(param(1) , param(2) , 'r+', 'MarkerSize', 8, 'LineWidth', 1);
+% Compare the results to the ground truth
+comp = groundtruth(localizations, GtLoc, iter);
 
 %plotting segments
 imshow(uint16(imageData)*100, 'InitialMagnification', 'fit');
@@ -54,19 +53,15 @@ hold off
 
 
 close(t);
+end
 
-
-function [localizations] = Fit_Gaussian(centroids, imageData)
+function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize)
 
 % Empty array to append localizations to
 localizations = [];
 
-% Grid with local coordinates inside the ROI
-xlen = 4;
-ylen = 4;
-
-X = linspace(1, xlen, xlen);
-Y = linspace(1, ylen, ylen);
+X = linspace(1, xsize, xsize);
+Y = linspace(1, ysize, ysize);
 
 % Grid coordinates for every point in the ROI
 [Xi, Yi] = meshgrid(X, Y);
@@ -80,7 +75,7 @@ yi = d(:, 2);
 
 % Coordinates for the origin of the local coordinate system in each region
 % of interest
-origin = round(centroids) - [xlen/2, ylen/2];
+origin = round(centroids) - [xsize/2, ysize/2];
 
 L = size(centroids);
 
@@ -92,7 +87,7 @@ for i = 1:L(1)
     roi = origin(i, :);
        
     % Select pixel data in the region of interest
-    localData = imageData(roi(2):(roi(2)+xlen-1), roi(1):(roi(1)+ylen-1));
+    localData = imageData(roi(2):(roi(2)+xsize-1), roi(1):(roi(1)+ysize-1));
 
     % rearranging ROI
     Ii  = transpose(localData);
@@ -104,7 +99,7 @@ for i = 1:L(1)
 
     % Define a point spread function
     PSF = @(xs, ys, sg, int, b, x, y)...
-            (((int/(2*pi*sg^2))*exp(-((x-xs).^2 + (y-ys).^2)/(2*sg^2)))+b);
+            (((int/(2*pi*sg^2))*exp(-((x-xs).^2 + (y-ys).^2)/(2*sg^2)))+(b));
 
     % Weighted least squares
     LS = fit([xi, yi], I, PSF, 'startpoint', [3,3,1,5000, 100],... 'lower', [0, 0, 0, 0, 0], ...
@@ -130,9 +125,15 @@ end
 
 end
 
-function [comp] = groundtruth(localizations)
+function [comp] = groundtruth(localizations, groundtruth_loc, iter)
+
+% Format the iteration number to match the name of the data
+num_gt  = '00000';
+num_gt(5-strlength(string(iter)) + 1:5) = string(iter);
+dir_gt = append(groundtruth_loc, num_gt ,'.csv');
+
 % Open the csv file with ground truth
-GT = readmatrix('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\00002.csv');
+GT = readmatrix(dir_gt);
 
 % Select the position ground truth
 pos = GT(:, 3:4);
@@ -149,11 +150,27 @@ loc  = sortrows(pos_loc, 1)*150;
 % Calculate the squared error
 rsq  = (sort - loc).^2;
 
-L_rsq = size(rsq)
+L_rsq = size(rsq);
 
 % Compute the mean squared error
 comp = sum(sqrt(rsq))/L_rsq(1);
 
+
+end
+
+function imageData = OpenIm(location, iter)
+
+% Format the iteration number to match the name of the data
+num  = '00000';
+num(5-strlength(string(iter)) + 1:5) = string(iter);
+dir = append(location, num ,'.tif');
+
+%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\00002.tif';
+% Opening the raw .tif file
+t = Tiff(dir, 'r');
+
+% Reading the image
+imageData = double(read(t));
 
 end
 

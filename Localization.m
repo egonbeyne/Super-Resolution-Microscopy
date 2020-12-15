@@ -2,10 +2,15 @@
 a           = 150e-9;   % [m] Pixel size
 xsize       = 4;
 ysize       = 4;
-sensitivity = 0.7; %threshold value in between the average and maximum intensity (sens = [0,1])
+sensitivity = 0.7;  %threshold value in between the average and maximum intensity (sens = [0,1])
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
-Nfiles      = 31; %Number of datafiles
+Nfiles      = 31;   %Number of datafiles
+
+% Empty array to store all localizations
+tot_loc     = [];
+
+
 for iter = 1:Nfiles
 
     
@@ -16,10 +21,13 @@ imageData = OpenIm(dataLoc, iter);
 centroids = segment_frame(imageData,sensitivity);
 
 % Localization
-localizations = Fit_Gaussian(centroids, imageData, xsize, ysize);
+localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter);
 
 xs = localizations(:, 1)*a;
 ys = localizations(:, 2)*a;
+
+% Store localization and frame number in one big array
+tot_loc = [tot_loc; [localizations(:, 1), localizations(:, 2), localizations(:,5)]];
 
 % Cramer-Rao lower bound calculation
 
@@ -35,8 +43,8 @@ dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
 dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N);
 
 % Compare the results to the ground truth
-comp = groundtruth(localizations, GtLoc, iter);
-
+%comp = groundtruth(localizations, GtLoc, iter);
+%{
 %plotting segments
 imshow(uint16(imageData)*100, 'InitialMagnification', 'fit');
 hold on
@@ -50,12 +58,19 @@ for i = 1:N
     
 end
 hold off
-
+%}
 
 close(t);
 end
 
-function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize)
+%plotting final result
+hold on
+axis on
+plot(tot_loc(:, 1), tot_loc(:, 2), 'r+')
+hold off
+
+
+function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter)
 
 % Empty array to append localizations to
 localizations = [];
@@ -79,7 +94,7 @@ origin = round(centroids) - [xsize/2, ysize/2];
 
 L = size(centroids);
 
-localizations = zeros(L(1), 4);
+localizations = zeros(L(1), 5);
 
 for i = 1:L(1)
     
@@ -117,7 +132,7 @@ for i = 1:L(1)
     sg  = param(3);
     b   = param(5);
     
-    localizations(i, :) = [xs, ys, sg, b];
+    localizations(i, :) = [xs, ys, sg, b, iter];
     
 
 end
@@ -146,6 +161,12 @@ pos_loc = localizations(:, 1:2);
 
 % Sort the localization and convert to nm
 loc  = sortrows(pos_loc, 1)*150;
+
+% Missed detection
+%if size(sort) > size(loc)
+    
+%    diff = sort(2:) - sort(:length(sort))
+%end
 
 % Calculate the squared error
 rsq  = (sort - loc).^2;

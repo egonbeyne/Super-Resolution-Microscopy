@@ -5,7 +5,7 @@ ysize       = 4;
 sensitivity = 0.7;  %threshold value in between the average and maximum intensity (sens = [0,1])
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
-Nfiles      = 31;   %Number of datafiles
+Nfiles      = 41;   %Number of datafiles
 
 % Empty array to store all localizations
 tot_loc     = [];
@@ -13,7 +13,6 @@ tot_loc     = [];
 
 for iter = 1:Nfiles
 
-    
 % Open the image
 imageData = OpenIm(dataLoc, iter);
 
@@ -40,10 +39,11 @@ tau   = 2*pi*(sigg^2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless b
 dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
 
 % Mortensen lower bound
-dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N);
+dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9
 
 % Compare the results to the ground truth
-%comp = groundtruth(localizations, GtLoc, iter);
+comp = norm(groundtruth(localizations, GtLoc, iter))
+
 %{
 %plotting segments
 imshow(uint16(imageData)*100, 'InitialMagnification', 'fit');
@@ -60,7 +60,6 @@ end
 hold off
 %}
 
-close(t);
 end
 
 %plotting final result
@@ -162,11 +161,28 @@ pos_loc = localizations(:, 1:2);
 % Sort the localization and convert to nm
 loc  = sortrows(pos_loc, 1)*150;
 
+% Get the number of datapoints present and the number found
+N_pr = size(sort);
+N_fd = size(loc);
+
 % Missed detection
-%if size(sort) > size(loc)
-    
-%    diff = sort(2:) - sort(:length(sort))
-%end
+if N_pr(1)>N_fd(1)
+    % Iterate until all missed detections are found
+    for i = 1:(N_pr-N_fd)
+        % Find the difference in location between datapoints. The missed
+        % detection is probably where they are closest
+        diff = sort(2:end, :) - sort(1:(end-1), :);
+
+        % Total difference
+        tot = sqrt((diff(:, 1).^2) + (diff(:, 2).^2));
+
+        % Get the index of the minimum 
+        [~, I] = min(tot);
+
+        % Remove the entry
+        sort(I, :) = [];
+    end
+end
 
 % Calculate the squared error
 rsq  = (sort - loc).^2;
@@ -192,6 +208,9 @@ t = Tiff(dir, 'r');
 
 % Reading the image
 imageData = double(read(t));
+
+
+close(t);
 
 end
 

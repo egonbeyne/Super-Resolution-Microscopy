@@ -26,7 +26,7 @@ b_psf = loc_data(:,4);
 
 %calculates the psf function for every localized molecule
 for i = 1:length(loc_data)   
-psf = PSF(xs_psf(i)*scaling,ys_psf(i)*scaling,sg_psf(i)*6,10,b_psf(i)*10,xi_psf,yi_psf);
+psf = PSF(xs_psf(i)*scaling,ys_psf(i)*scaling,sg_psf(i)*scaling/3,10,b_psf(i)*scaling,xi_psf,yi_psf);
 psf_im = psf_im + reshape(psf,[xsize_psf*scaling,ysize_psf*scaling]);
 
 end

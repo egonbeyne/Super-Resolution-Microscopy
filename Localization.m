@@ -36,13 +36,13 @@ sige2 = (sigg^2) + ((a^2)/12);
 tau   = 2*pi*(sigg^2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
 
 % Cramer rao lower bound
-dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
+dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
 
 % Mortensen lower bound
-dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9
+dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9;
 
 % Compare the results to the ground truth
-comp = norm(groundtruth(localizations, GtLoc, iter))
+comp = norm(groundtruth(localizations, GtLoc, iter));
 
 %{
 %plotting segments
@@ -116,7 +116,7 @@ for i = 1:L(1)
             (((int/(2*pi*sg^2))*exp(-((x-xs).^2 + (y-ys).^2)/(2*sg^2)))+(b));
 
     % Weighted least squares
-    LS = fit([xi, yi], I, PSF, 'startpoint', [3,3,1,5000, 100],... 'lower', [0, 0, 0, 0, 0], ...
+    LS = fit([xi, yi], I, PSF, 'startpoint', [2,2,1,5000, 100],... 'lower', [0, 0, 0, 0, 0], ...
         'Robust', 'LAR',...
         'Algorithm', 'Trust-Region',...
         'weight', w,...

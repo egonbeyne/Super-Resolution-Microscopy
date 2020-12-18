@@ -59,9 +59,15 @@ dfdin = diff(psf, int);
 dfdb  = diff(psf, b);
 
 step = [4, 4];
+maxIt = 10;
 
-while (step(1)^2 + step(2)^2)>0.001
+it = 0;
 
+while (step(1)^2 + step(2)^2)>0.001 && it<maxIt
+
+    % Counting iterations
+    it = it + 1;
+    
     % Unpack values from b
     xs_0  = B(1);
     ys_0  = B(2);
@@ -84,7 +90,7 @@ while (step(1)^2 + step(2)^2)>0.001
     
     sum(fi - double(psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi)))
 
-    % Damping for levenberg marquardt
+    % Damping for levenberg marquardt (Has to be tuned)
     damp = 1;
     
     % Calculate the step size
@@ -93,6 +99,7 @@ while (step(1)^2 + step(2)^2)>0.001
 
     % Update the function parameters
     B = B + step;
+    
 end
 imshow(uint16(sel)*100,'InitialMagnification', 'fit');
 axis on

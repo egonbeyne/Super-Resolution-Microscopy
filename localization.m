@@ -9,8 +9,7 @@ dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\eye2.0\seq
 Nfiles      = 41;   %Number of datafiles
 
 % Empty array to store all localizations
-tot_loc     = [];
-tot_psf     = [];
+loc_molecules = []; 
 
 for iter = 1:Nfiles
 
@@ -23,19 +22,18 @@ centroids = segment_frame(imageData,sensitivity);
 % Localization
 localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter);
 
-xs = localizations(:, 1)*a;
-ys = localizations(:, 2)*a;
+xc = localizations(:, 1)*a;
+yc = localizations(:, 2)*a;
 
 % Store localization and frame number in one big array
-tot_loc = [tot_loc; [localizations(:, 1), localizations(:, 2),localizations(:,5)]];
-tot_psf = [tot_psf; [localizations(:,1),localizations(:,2),localizations(:,3), localizations(:,4)]];
-
+%tot_loc = [tot_loc; [localizations(:, 1), localizations(:, 2),localizations(:,5)]];
+loc_molecules = [loc_molecules; [localizations]];
 
 % Cramer-Rao lower bound calculation
-N     = sum(imageData, 'all');               % [-] Number of signal photons 
-sigg  = mean(localizations(3))*a;                              % Converting std. of PSF to m from pixels
+N     = sum(imageData, 'all');                            % [-] Number of signal photons 
+sigg  = mean(localizations(3))*a;                         % Converting std. of PSF to m from pixels
 sige2 = (sigg^2) + ((a^2)/12);         
-tau   = 2*pi*(sigg^2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
+tau   = 2*pi*(sige2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
 
 % Cramer rao lower bound
 dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N);
@@ -66,7 +64,9 @@ end
 
 %%%%%%%%
 %plotting final result
-reconstruct(256,30,tot_psf)
+npixels = 256;
+nanometer = 5;
+reconstruct(npixels,nanometer,loc_molecules)
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter)
 
@@ -206,7 +206,6 @@ t = Tiff(dir, 'r');
 
 % Reading the image
 imageData = double(read(t));
-
 
 close(t);
 

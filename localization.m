@@ -66,7 +66,7 @@ end
 
 %%%%%%%%
 %plotting final result
-reconstruct(256,20,tot_psf)
+reconstruct(256,30,tot_psf)
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter)
 
@@ -131,7 +131,6 @@ for i = 1:L(1)
     b   = param(5);
     
     localizations(i, :) = [xs, ys, sg, b, iter];
-    
     
 end
 

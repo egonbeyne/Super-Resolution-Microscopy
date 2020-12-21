@@ -29,7 +29,6 @@ xc = localizations(:, 1)*a;
 yc = localizations(:, 2)*a;
 
 % Store localization and frame number in one big array
-%tot_loc = [tot_loc; [localizations(:, 1), localizations(:, 2),localizations(:,5)]];
 loc_molecules = [loc_molecules; [localizations]];
 
 % Cramer-Rao lower bound calculation
@@ -51,6 +50,10 @@ dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9;
 % Store the CRLB and comparison to the ground truth
 acc(iter, :) = [dx, comp, missed, Nmol, iter];
 
+% Print progress
+progress = string(iter/Nfiles*100) + '% done';
+disp(progress)
+
 end
 
 % Average accuracy relative to CRLB
@@ -66,7 +69,9 @@ bar(acc(:, 2)./acc(:, 1))
 %plotting final result
 npixels = 256;
 nanometer = 5;
-reconstruct(npixels,nanometer,loc_molecules)
+%reconstruct(npixels,nanometer,loc_molecules)
+% Faster plotting for testing purpose
+plot(loc_molecules(:, 1), loc_molecules(:, 2), 'r+')
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a)
 
@@ -115,9 +120,10 @@ for i = 1:L(1)
     LS = fit([xi, yi], I, PSF, 'startpoint', [3,3,1,5000, 100],... 'lower', [0, 0, 0, 0, 0], ...
         'Robust', 'LAR',...
         'Algorithm', 'Trust-Region',...
+        'display', 'off',...
         'weight', w,...
         'TolX', [10^-2],...
-        'MaxIter', 10);
+        'MaxIter', 5);
 
     % Fitting parameters [xs, ys, sigma, Intensity]
     param = coeffvalues(LS);

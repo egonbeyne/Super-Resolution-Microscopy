@@ -1,15 +1,18 @@
 % Constants
+clear all;
 a           = 150e-9;   % [m] Pixel size
 xsize       = 4;
 ysize       = 4;
 sensitivity = 0.7;  %threshold value in between the average and maximum intensity (sens = [0,1])
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
+dataLoc     = 'C:\Users\Egon Beyne\MATLAB\Projects\Super-resolution\Data\sequence\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
 Nfiles      = 41;   %Number of datafiles
 
 % Empty array to store all localizations
-tot_loc     = [];
+loc_molecules = []; 
 
+% Array to store accuracy of localization in each frame
+acc     = zeros(Nfiles, 5);
 
 for iter = 1:Nfiles
 
@@ -20,20 +23,20 @@ imageData = OpenIm(dataLoc, iter);
 centroids = segment_frame(imageData,sensitivity);
 
 % Localization
-localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter);
+localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a);
 
-xs = localizations(:, 1)*a;
-ys = localizations(:, 2)*a;
+xc = localizations(:, 1)*a;
+yc = localizations(:, 2)*a;
 
 % Store localization and frame number in one big array
-tot_loc = [tot_loc; [localizations(:, 1), localizations(:, 2), localizations(:,5)]];
+%tot_loc = [tot_loc; [localizations(:, 1), localizations(:, 2),localizations(:,5)]];
+loc_molecules = [loc_molecules; [localizations]];
 
 % Cramer-Rao lower bound calculation
-
-N     = sum(imageData, 'all');               % [-] Number of signal photons 
-sigg  = mean(localizations(3))*a;                              % Converting std. of PSF to m from pixels
+N     = sum(imageData, 'all');                            % [-] Number of signal photons 
+sigg  = mean(localizations(3))*a;                         % Converting std. of PSF to m from pixels
 sige2 = (sigg^2) + ((a^2)/12);         
-tau   = 2*pi*(sigg^2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
+tau   = 2*pi*(sige2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
 
 % Cramer rao lower bound
 dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
@@ -42,37 +45,30 @@ dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
 dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9;
 
 % Compare the results to the ground truth
-comp = norm(groundtruth(localizations, GtLoc, iter));
+[comp, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
 
-%{
-%plotting segments
-imshow(uint16(imageData)*100, 'InitialMagnification', 'fit');
-hold on
-axis on
-plot(centroids(:,1), centroids(:,2), 'b*')
-plot(xs/a + 0.5, ys/a + 0.5, 'r+', 'MarkerSize', 8, 'LineWidth', 1);
-bsize = 10;
-N = length(centroids(:,1));
-for i = 1:N
-    rectangle('Position', [centroids(i,1)-bsize/2, centroids(i,2)-bsize/2, bsize, bsize],'EdgeColor','r')
-    
-end
-hold off
-%}
+
+% Store the CRLB and comparison to the ground truth
+acc(iter, :) = [dx, comp, missed, Nmol, iter];
 
 end
 
+% Average accuracy relative to CRLB
+rel_acc = mean((acc(:, 2)./acc(:, 1))*Nmol);
+
+% Total number of missed detections
+tot_miss = sum(acc(:, 3));
+
+% Relative accuracy for each frame
+bar(acc(:, 2)./acc(:, 1))
+
+%%%%%%%%
 %plotting final result
-hold on
-axis on
-plot(tot_loc(:, 1), tot_loc(:, 2), 'r+')
-hold off
+npixels = 256;
+nanometer = 5;
+reconstruct(npixels,nanometer,loc_molecules)
 
-
-function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter)
-
-% Empty array to append localizations to
-localizations = [];
+function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a)
 
 X = linspace(1, xsize, xsize);
 Y = linspace(1, ysize, ysize);
@@ -116,12 +112,12 @@ for i = 1:L(1)
             (((int/(2*pi*sg^2))*exp(-((x-xs).^2 + (y-ys).^2)/(2*sg^2)))+(b));
 
     % Weighted least squares
-    LS = fit([xi, yi], I, PSF, 'startpoint', [2,2,1,5000, 100],... 'lower', [0, 0, 0, 0, 0], ...
+    LS = fit([xi, yi], I, PSF, 'startpoint', [3,3,1,5000, 100],... 'lower', [0, 0, 0, 0, 0], ...
         'Robust', 'LAR',...
         'Algorithm', 'Trust-Region',...
         'weight', w,...
         'TolX', [10^-2],...
-        'MaxIter', 5);
+        'MaxIter', 10);
 
     % Fitting parameters [xs, ys, sigma, Intensity]
     param = coeffvalues(LS);
@@ -133,13 +129,12 @@ for i = 1:L(1)
     
     localizations(i, :) = [xs, ys, sg, b, iter];
     
-
 end
 
 
 end
 
-function [comp] = groundtruth(localizations, groundtruth_loc, iter)
+function [comp, missed, Nmol] = groundtruth(localizations, groundtruth_loc, iter)
 
 % Format the iteration number to match the name of the data
 num_gt  = '00000';
@@ -164,6 +159,12 @@ loc  = sortrows(pos_loc, 1)*150;
 % Get the number of datapoints present and the number found
 N_pr = size(sort);
 N_fd = size(loc);
+
+% Number of detections
+Nmol = N_fd(1);
+
+% Missed detections
+missed = N_pr(1)- N_fd(1);
 
 % Missed detection
 if N_pr(1)>N_fd(1)
@@ -190,7 +191,7 @@ rsq  = (sort - loc).^2;
 L_rsq = size(rsq);
 
 % Compute the mean squared error
-comp = sum(sqrt(rsq))/L_rsq(1);
+comp = norm(sum(sqrt(rsq))/L_rsq(1));
 
 
 end
@@ -202,19 +203,14 @@ num  = '00000';
 num(5-strlength(string(iter)) + 1:5) = string(iter);
 dir = append(location, num ,'.tif');
 
-%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\00002.tif';
 % Opening the raw .tif file
 t = Tiff(dir, 'r');
 
 % Reading the image
 imageData = double(read(t));
 
-
 close(t);
 
 end
-
-
-
 
 

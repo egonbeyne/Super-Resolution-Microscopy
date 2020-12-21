@@ -17,6 +17,8 @@ sel = imageData(129:132, 31:34);
 
 close(t);
 
+test = 3;
+
 
 % Empty array to append localizations to
 localizations = [];

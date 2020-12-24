@@ -64,6 +64,9 @@ step = [4, 4];
 maxIt = 10;
 
 it = 0;
+% Damping for levenberg marquardt (Has to be tuned)
+L_0 = 1;
+v   = 2;
 
 while (step(1)^2 + step(2)^2)>0.001 && it<maxIt
 
@@ -76,6 +79,9 @@ while (step(1)^2 + step(2)^2)>0.001 && it<maxIt
     sg_0  = B(3);
     int_0 = B(4);
     b_0   = B(5);
+    
+    % Residuals at the initial guess
+    Si    = sum((fi - double(psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))).^2);
 
 
     % Filling in initial guesses and datapoints 
@@ -90,19 +96,35 @@ while (step(1)^2 + step(2)^2)>0.001 && it<maxIt
 
     JT = transpose(J);
     
-    sum(fi - double(psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi)))
-
-    % Damping for levenberg marquardt (Has to be tuned)
-    damp = 1;
+    % Residuals
+    res = (JT*(fi - double(psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
     
     % Calculate the step size
-    step = inv(JT*J + damp*eye(5))*(JT*(fi - double(psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
-
-
-    % Update the function parameters
-    B = B + step;
+    step_0 = (JT*J + L_0*eye(5))\res;
+    step_v = (JT*J + (L_0/v)*eye(5))\res;
     
+    % Update the function parameters
+    B_0  = B + step_0;
+    B_v  = B + step_v;
+    
+    S_0 = sum((fi - double(psf(B_0(1), B_0(2), B_0(3), B_0(4), B_0(5), xi, yi))).^2);
+    S_v = sum((fi - double(psf(B_v(1), B_v(2), B_v(3), B_v(4), B_v(5), xi, yi))).^2);
+    
+    % If both choices for damping parameter are worse, multiply by v and
+    % guess again
+    if S_0>Si && S_v>Si
+        L_0 = v*L_0;
+        B   = B + ((JT*J + L_0*eye(5))\res);
+    else if S_0>S_v
+            B = B_0;
+        else
+            B = B_v;
+            L_0 = L_0/v;
+        end
+    end
+            
 end
+
 imshow(uint16(sel)*100,'InitialMagnification', 'fit');
 axis on
 hold on

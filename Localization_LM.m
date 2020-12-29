@@ -1,5 +1,6 @@
 % Constants
 clear all;
+tic
 a           = 150e-9;   % [m] Pixel size
 xsize       = 4;
 ysize       = 4;
@@ -70,6 +71,7 @@ end
 % Average accuracy relative to CRLB
 rel_acc = mean((acc(:, 2)./acc(:, 1))*Nmol);
 
+
 % Total number of missed detections
 tot_miss = sum(acc(:, 3));
 
@@ -84,6 +86,8 @@ nanometer = 5;
 % Faster plotting for testing purpose
 plot(loc_molecules(:, 1), loc_molecules(:, 2), 'r.')
 set(gca,'Color','k')
+
+toc
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,...
     dfdxs, dfdys, dfdsg, dfdin, psf)
@@ -139,9 +143,10 @@ step = [4, 4];
 maxIt = 30;
 
 it = 0;
+
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 4.1;
-v   = 1.5;
+L_0 = 4.5;
+v   = 1.9;
 
 while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
 
@@ -156,8 +161,7 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     b_0   = B(5);
     
     % Residuals at the initial guess
-    Si    = sum((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi)).^2);
-
+    Si    = sum(((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi)).^2));
 
     % Filling in initial guesses and datapoints 
     dfdxs_0  = dfdxs(xs_0, ys_0, sg_0, int_0, b_0, xi, yi);
@@ -168,28 +172,32 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
 
     % Jacobian Matrix
     J = [dfdxs_0, dfdys_0, dfdsg_0, dfdin_0, dfdb_0];
-
     JT = transpose(J);
     
     % Residuals
-    res = (JT*(fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi)));
+    res = (JT*((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
     jtj = JT*J;
+    
+    % Damping matrix according to 'Improvements to the Levenberg-Marquardt algorithm for nonlinear
+    %least-squares minimization'
+    dtd = jtj;
+    
     % Calculate the step size
-    step_0 = (jtj + L_0*jtj)\res;
-    step_v = (jtj + (L_0/v)*jtj)\res;
+    step_0 = (jtj + L_0*dtd)\res;
+    step_v = (jtj + (L_0/v)*dtd)\res;
     
     % Update the function parameters
     B_0  = B + step_0;
     B_v  = B + step_v;
     
-    S_0 = sum((fi - psf(B_0(1), B_0(2), B_0(3), B_0(4), B_0(5), xi, yi)).^2);
-    S_v = sum((fi - psf(B_v(1), B_v(2), B_v(3), B_v(4), B_v(5), xi, yi)).^2);
+    S_0 = sum(((fi - psf(B_0(1), B_0(2), B_0(3), B_0(4), B_0(5), xi, yi)).^2));
+    S_v = sum(((fi - psf(B_v(1), B_v(2), B_v(3), B_v(4), B_v(5), xi, yi)).^2));
     
     % If both choices for damping parameter are worse, multiply by v and
     % guess again
     if S_0>Si && S_v>Si
         L_0 = v*L_0;
-        B   = B + ((jtj + L_0*jtj)\res);
+        B   = B + ((jtj + L_0*dtd)\res);
     else if S_0>S_v
             B = B_0;
         else

@@ -7,7 +7,9 @@ ysize       = 4;
 sensitivity = 0.7;  %threshold value in between the average and maximum intensity (sens = [0,1])
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
-Nfiles      = 41;   %Number of datafiles
+Nfiles      = 19996;   %Number of datafiles
+resolution  = size(OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', 1));
+
 
 % Making a point spread function
 psf = @(xs, ys, sg, int, b, x, y)((int/(2*pi*(sg^2)))*exp(-((x-xs).^2 + (y-ys).^2)/(2*(sg^2)))+b); 
@@ -21,53 +23,65 @@ dfdin = @(xs, ys, sg, int, b, x, y)exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(
 dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 
 % Empty array to store all localizations
-loc_molecules = []; 
+loc_molecules = []%zeros(Nfiles, 5); 
 
 % Array to store accuracy of localization in each frame
 acc     = zeros(Nfiles, 5);
 
-%for iter = 1:Nfiles
-iter = 233;
-
-% Open the image
-imageData = OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', iter);
-
-% Segmenting the data
-centroids = segment_frame(imageData,sensitivity);
-
-% Localization
-localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,dfdxs, dfdys, dfdsg, dfdin, psf);
-
-xc = localizations(:, 1)*a;
-yc = localizations(:, 2)*a;
-
-% Store localization and frame number in one big array
-loc_molecules = [loc_molecules; [localizations]];
-
-% Cramer-Rao lower bound calculation
-N     = sum(imageData, 'all');                            % [-] Number of signal photons 
-sigg  = mean(localizations(3))*a;                         % Converting std. of PSF to m from pixels
-sige2 = (sigg^2) + ((a^2)/12);         
-tau   = 2*pi*(sige2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
-
-% Cramer rao lower bound
-dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
-
-% Mortensen lower bound
-dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9;
-
-% Compare the results to the ground truth
-%[comp, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
+for iter = 1:Nfiles
 
 
-% Store the CRLB and comparison to the ground truth
-%acc(iter, :) = [dx, comp, missed, Nmol, iter];
+    % Open the image
+    imageData = OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', iter);
 
-% Print progress
-progress = string(iter/Nfiles*100) + '% done';
-disp(progress)
+    % Segmenting the data
+    centroids = segment_frame(imageData,sensitivity);
 
-%end
+    % Skip current loop iteration if no molecules are present (lots of
+    % detections)
+    if length(centroids)>10
+        continue
+    end
+
+
+    % Localization
+    localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
+    
+    % Stop current iteration if no localizations are present
+    if size(localizations, 1)==0
+        continue
+    end
+    
+    xc = localizations(:, 1)*a;
+    yc = localizations(:, 2)*a;
+
+    % Store localization and frame number in one big array
+    loc_molecules = [loc_molecules; [localizations]];
+
+    % Cramer-Rao lower bound calculation
+    N     = sum(imageData, 'all');                            % [-] Number of signal photons 
+    sigg  = mean(localizations(3))*a;                         % Converting std. of PSF to m from pixels
+    sige2 = (sigg^2) + ((a^2)/12);         
+    tau   = 2*pi*(sige2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
+
+    % Cramer rao lower bound
+    dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
+
+    % Mortensen lower bound
+    dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9;
+
+    % Compare the results to the ground truth
+    %[comp, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
+
+
+    % Store the CRLB and comparison to the ground truth
+    %acc(iter, :) = [dx, comp, missed, Nmol, iter];
+
+    % Print progress
+    progress = string(iter/Nfiles*100) + '% done';
+    disp(progress)
+
+end
 
 % Average accuracy relative to CRLB
 %rel_acc = mean((acc(:, 2)./acc(:, 1))*Nmol);
@@ -83,18 +97,19 @@ disp(progress)
 %plotting final result
 npixels = 256;
 nanometer = 5;
-%reconstruct(npixels,nanometer,loc_molecules)
+reconstruct(npixels,nanometer,loc_molecules)
 % Faster plotting for testing purpose
-imshow(uint16(imageData)*10)
-hold on
-axis on
-plot(xc/a +0.5, yc/a +0.5, 'r.')
+%imshow(uint16(imageData)*10)
+%hold on
+%axis on
+%plot(loc_molecules(:, 1), loc_molecules(:, 2), 'r.')%plot(xc/a +0.5, yc/a +0.5, 'r.')
+axis([0, 64, 0, 64])
 set(gca,'Color','k')
 
 toc
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,...
-    dfdxs, dfdys, dfdsg, dfdin, psf)
+    dfdxs, dfdys, dfdsg, dfdin, psf, resolution)
 
 X = linspace(1, xsize, xsize);
 Y = linspace(1, ysize, ysize);
@@ -121,6 +136,11 @@ for i = 1:L(1)
     
     % Extract coordinates of the origin of one region of interest
     roi = origin(i, :);
+    
+    
+    % Prevent the search domain being outside the image
+    roi(1) = min(max(roi(1), 1), resolution(1)- ysize+1);
+    roi(2) = min(max(roi(2), 1), resolution(2) - xsize +1);
        
     % Select pixel data in the region of interest
     localData = imageData(roi(2):(roi(2)+xsize-1), roi(1):(roi(1)+ysize-1));
@@ -149,8 +169,8 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 4.5;
-v   = 1.9;
+L_0 = 40;
+v   = 2;
 
 while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
 
@@ -226,10 +246,10 @@ end
 
 
 % Filter out localizations using a molecule that is too dim
-localizations(localizations(:, 6)<1e4,:) = [];
+localizations(localizations(:, 6)<5e3,:) = [];
 
 % Filter out double localizations
-localizations(localizations(:, 3)<1,:) = [];
+localizations(localizations(:, 3)<0.5,:) = [];
 
 localizations(:, 6) = [];
 

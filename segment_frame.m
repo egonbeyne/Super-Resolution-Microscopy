@@ -1,27 +1,28 @@
 
-function [centroids] = segment_frame(imdata,sens)
-R = size(imdata,1);
-C = size(imdata,2);
-segmented_im = zeros(R,C);
+function [centroids] = segment_frame(imageData)
+%Removing the median value for background variation
+imageData = imageData - median(imageData(:));
 
-%determine threshold based on mean and max value
-meanval = mean(imdata(:));                      %mean value in data
-maxval = max(imdata(:));                        %max value in data
-thr = meanval + (1-sens)*(maxval - meanval);    %threshold being somewhere between average and max intensity
+%filtering the image with a gaussian with sigma should be 1.5~2
+image_f = imgaussfilt(imageData,3/2);
 
-%thresholding pixel values
-for i = 1:R
-    for j = 1:C
-        if imdata(i,j) > thr
-             segmented_im(i,j) = imdata(i,j);
-        else
-             segmented_im(i,j) = 0;
-        end
-    end
+%std of the data for thresholding
+%sigma_f = std(image_f(:));
+sigma = std(imageData(:));
+
+%high std should have higher threshold
+thr = 3*sigma;  %should be sigma_f?
+
+% thresholding pixel values based on median
+segmented_im = image_f.*(image_f>thr);
+
+%finding regional maxima as locations of molecules
+if (sum(any(segmented_im)) ~= 0)
+  regional_max = imregionalmax(segmented_im);
+  [y,x] = find(regional_max);
+  centroids = [x,y];
+else
+   centroids = NaN(1,2);    %no molecules detected
 end
-
-%finding centre of molecules (logical values)
-s = regionprops(logical(segmented_im));         %estimation of the centre of a connected region
-centroids = cat(1, s.Centroid);                 %array of molecule locations
 
 end

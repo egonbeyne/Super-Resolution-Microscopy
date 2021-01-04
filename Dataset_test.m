@@ -2,13 +2,14 @@
 clear all;
 tic
 a           = 100e-9;   % [m] Pixel size
+new_px      = 10;       %[nm] accuracy of reconstructed image
 xsize       = 4;
 ysize       = 4;
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
 Nfiles      = 19996;   %Number of datafiles
 resolution  = size(OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', 1));
-
+npixels     = 64;   % number of pixels in one dimension (assuming rectangular image)
 
 % Making a point spread function
 psf = @(xs, ys, sg, int, b, x, y)((int/(2*pi*(sg^2)))*exp(-((x-xs).^2 + (y-ys).^2)/(2*(sg^2)))+b); 
@@ -28,10 +29,10 @@ loc_molecules = [];%zeros(Nfiles, 5);
 acc     = zeros(Nfiles, 5);
 
 % Empty array for reconstruction
-psf_im = [zeros(64*20, 64*20)];
+tot_im = [zeros(730, 730)];
 
 
-lastwarn(['a','b'])
+lastwarn(['a','b']);
 for iter = 1:Nfiles
 
 
@@ -94,7 +95,7 @@ for iter = 1:Nfiles
     % Store the CRLB and comparison to the ground truth
     %acc(iter, :) = [dx, comp, missed, Nmol, iter];
     
-    psf_im = reconstruct(64,5,localizations, psf_im);
+    tot_im = reconstruct(tot_im, localizations, 100, new_px, npixels);
 
     % Print progress
     progress = string(iter/Nfiles*100) + '% done';
@@ -113,18 +114,8 @@ end
 %bar(acc(:, 2)./acc(:, 1))
 
 %%%%%%%%
-%plotting final result
-npixels = 256;
-nanometer = 5;
-%reconstruct(64,nanometer,loc_molecules)
-% Faster plotting for testing purpose
-%imshow(uint16(imageData)*10)
-%hold on
-%axis on
-%plot(loc_molecules(:, 1), loc_molecules(:, 2), 'r.')%plot(xc/a +0.5, yc/a +0.5, 'r.')
-axis([0, 64, 0, 64])
-set(gca,'Color','k')
-
+axis equal
+imshow(tot_im)
 toc
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,...

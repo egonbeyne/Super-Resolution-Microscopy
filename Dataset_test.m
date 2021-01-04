@@ -4,7 +4,6 @@ tic
 a           = 100e-9;   % [m] Pixel size
 xsize       = 4;
 ysize       = 4;
-sensitivity = 0.7;  %threshold value in between the average and maximum intensity (sens = [0,1])
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
 Nfiles      = 19996;   %Number of datafiles
@@ -23,11 +22,16 @@ dfdin = @(xs, ys, sg, int, b, x, y)exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(
 dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 
 % Empty array to store all localizations
-loc_molecules = []%zeros(Nfiles, 5); 
+loc_molecules = [];%zeros(Nfiles, 5); 
 
 % Array to store accuracy of localization in each frame
 acc     = zeros(Nfiles, 5);
 
+% Empty array for reconstruction
+psf_im = [zeros(64*20, 64*20)];
+
+
+lastwarn(['a','b'])
 for iter = 1:Nfiles
 
 
@@ -35,17 +39,30 @@ for iter = 1:Nfiles
     imageData = OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', iter);
 
     % Segmenting the data
-    centroids = segment_frame(imageData,sensitivity);
+    centroids = segment_frame(imageData);
 
     % Skip current loop iteration if no molecules are present (lots of
     % detections)
-    if length(centroids)>10
+    if sum(isnan(centroids), 'all')>0
         continue
     end
 
 
     % Localization
     localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
+    
+    % Check if any warnings are given
+    [warnmsg, msgid] = lastwarn;
+    
+    % If the warning is about an ill conditioned matrix, skip the frame
+    % (Gives NaN as fitting parameters, which screws up the
+    % reconstruction)
+    if strcmp(msgid,'MATLAB:illConditionedMatrix')
+        
+        % Reset the warning
+        lastwarn(['','']);
+        continue
+    end
     
     % Stop current iteration if no localizations are present
     if size(localizations, 1)==0
@@ -56,7 +73,7 @@ for iter = 1:Nfiles
     yc = localizations(:, 2)*a;
 
     % Store localization and frame number in one big array
-    loc_molecules = [loc_molecules; [localizations]];
+    %loc_molecules = [loc_molecules; [localizations]];
 
     % Cramer-Rao lower bound calculation
     N     = sum(imageData, 'all');                            % [-] Number of signal photons 
@@ -76,11 +93,13 @@ for iter = 1:Nfiles
 
     % Store the CRLB and comparison to the ground truth
     %acc(iter, :) = [dx, comp, missed, Nmol, iter];
+    
+    psf_im = reconstruct(64,5,localizations, psf_im);
 
     % Print progress
     progress = string(iter/Nfiles*100) + '% done';
     disp(progress)
-
+    iter;
 end
 
 % Average accuracy relative to CRLB
@@ -97,7 +116,7 @@ end
 %plotting final result
 npixels = 256;
 nanometer = 5;
-reconstruct(npixels,nanometer,loc_molecules)
+%reconstruct(64,nanometer,loc_molecules)
 % Faster plotting for testing purpose
 %imshow(uint16(imageData)*10)
 %hold on
@@ -155,22 +174,32 @@ for i = 1:L(1)
 
     fi = Ii(:);
 
+% Initial guesses for x and y
+xin = centroids(i, 2) - roi(2);
+yin = centroids(i, 1) - roi(1);
+
+% Initial guess for intensity (based on the sum of the intensity in the
+% local frame
+Iin = sum(localData, 'all');
+
+% Initial guess for b, based on average intensity of the entire image,
+% scaled with a factor 2 to account for fluorescent molecules
+bin = sum(imageData, 'all')/(resolution(1)*resolution(2)*2);
 
 % Initial guess for function parameters
-B     = [2;2;1;5000; 100];
+B     = [xin; yin; 1.5; Iin; bin];
 
-
-
-
-
+% x and y step size to start up iterations (exaggerated)
 step = [4, 4];
+
+% Maximum number of iterations
 maxIt = 30;
 
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 40;
-v   = 2;
+L_0 = 1000;
+v   = 1.5;
 
 while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
 
@@ -204,7 +233,7 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     
     % Damping matrix according to 'Improvements to the Levenberg-Marquardt algorithm for nonlinear
     %least-squares minimization'
-    dtd = jtj;
+    dtd = eye(5)*diag(jtj);
     
     % Calculate the step size
     step_0 = (jtj + L_0*dtd)\res;

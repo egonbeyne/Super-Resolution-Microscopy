@@ -7,7 +7,7 @@ psf_pixels = 9;    %5 is the middle pixel for location of psf
 xsize_psf = psf_pixels;
 ysize_psf = psf_pixels;
 
-scaling = oldpixelsize/newpixelsize;  %scaling to achieve new nanometer-size subpixels
+scaling = round(oldpixelsize/newpixelsize);  %scaling to achieve new nanometer-size subpixels
 % + 2*edge to prevent the psf box to exceed the boundary of the image
 xsubsize = (xsize_psf);   
 ysubsize = (ysize_psf);    
@@ -38,7 +38,7 @@ ys_psf = locations(:,2);
 %calculates the psf function for every localized molecule in locations
 for i = 1:size(locations,1)   
 
-psf = PSF(((psf_pixels+1)/2),((psf_pixels+1)/2),1,1,0,xi_psf,yi_psf);
+psf = PSF(((psf_pixels+1)/2),((psf_pixels+1)/2),5/newpixelsize,1,0,xi_psf,yi_psf);
 
 %reshape psf data into block of subpixel scale
 psf_block = reshape(psf,[psf_pixels,psf_pixels]);

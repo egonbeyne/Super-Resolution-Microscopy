@@ -8,7 +8,7 @@ rec_px      = 10;       %[nm] accuracy of reconstructed image
 xsize       = 4;        %[px] size of fitting region in x
 ysize       = 4;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
-GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 Nfiles      = 19996;   %Number of datafiles
 resolution  = size(OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
@@ -30,6 +30,9 @@ tot_im  = zeros((nypixels+9)*im_px/rec_px, (nxpixels+9)*im_px/rec_px);
 
 % Array to store accuracy information
 acc     = zeros(Nfiles, 3);
+
+% Array to store localizations
+loc_mol = [];
 
 for iter = 1:Nfiles
 
@@ -67,9 +70,12 @@ for iter = 1:Nfiles
     
     xc = localizations(:, 1)*im_px;
     yc = localizations(:, 2)*im_px;
+    
+    % Store locations to compare with ground truth
+    loc_mol = [loc_mol; [xc, yc]];
 
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6)) - mean(localizations(:,3));       % [-] Number of signal photons 
+    N     = mean(localizations(:, 6));       % [-] Number of signal photons 
     sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
@@ -96,6 +102,9 @@ histogram(acc(:, 2))
 axis equal
 figure(2)
 imshow(tot_im)
+
+% Compute the accuracy
+comp = groundtruth_combined(loc_mol, GtLoc);
 
 % Execution time
 toc
@@ -255,6 +264,32 @@ localizations(localizations(:, 3)<0.5,:) = [];
 
 localizations(:, 6) = [];
 
+end
+
+function comp = groundtruth_combined(loc_mol, groundtruth_loc)
+
+% Open and read the csv file containing ground truth data
+gt = readmatrix(groundtruth_loc);
+
+% Array to store localization errors
+C      = zeros(size(gt, 1), 1);
+
+% Iterate through ground truth and find the closest localization to each
+% ground truth molecule.
+for k=1:size(gt)
+    
+  % value and index of minimum error
+  [val,idx]=min(sqrt(sum((gt(:, 1:2)-loc_mol(k, :)).^2, 2)));
+  
+  % Store the error
+  C(k)=val;
+  
+  % Remove entry from ground truth
+  gt(idx, :)=[];
+end
+
+% Compute the average accuracy, excluding outliers
+comp = trimmean(C, 99.5);
 end
 
 function [comp, missed, Nmol] = groundtruth(localizations, groundtruth_loc, iter)

@@ -1,7 +1,7 @@
 %Reconstruct an (npixels x npixels) image of gaussian blobs on a subsize grid with pixelsize:
 %(nanometer) based on (locations)
 
-function [total_image] = reconstruct(prev_image,locations,oldpixelsize,newpixelsize,npixels)
+function [total_image] = reconstruct(prev_image,locations,oldpixelsize,newpixelsize, nxpixels, nypixels)
 
 psf_pixels = 9;    %5 is the middle pixel for location of psf
 xsize_psf = psf_pixels;
@@ -13,7 +13,7 @@ xsubsize = (xsize_psf);
 ysubsize = (ysize_psf);    
 
 %can be cleaned every molecule
-psf_im = zeros((npixels+psf_pixels)*scaling, (npixels+psf_pixels)*scaling);
+psf_im = zeros((nypixels+psf_pixels)*scaling, (nxpixels+psf_pixels)*scaling);
 
 %set equal to image from previous reconstruction
 total_image = prev_image;
@@ -51,7 +51,7 @@ psf_im((round(xs_psf(i)*scaling))+1:(round(xs_psf(i)*scaling)+(psf_pixels)),...
 total_image = total_image + psf_im;
 
 %clean sheet for new molecule
-psf_im = zeros((npixels+psf_pixels)*scaling, (npixels+psf_pixels)*scaling);
+psf_im = zeros((nypixels+psf_pixels)*scaling, (nxpixels+psf_pixels)*scaling);
 
 end
 

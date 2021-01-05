@@ -1,15 +1,18 @@
-% Constants
+
 clear all;
 tic
-a           = 100e-9;   % [m] Pixel size
-new_px      = 10;       %[nm] accuracy of reconstructed image
-xsize       = 4;
-ysize       = 4;
+
+% Constants
+im_px       = 100;      %[nm] Pixel size
+rec_px      = 10;       %[nm] accuracy of reconstructed image
+xsize       = 4;        %[px] size of fitting region in x
+ysize       = 4;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\Ground-truth\';
 Nfiles      = 19996;   %Number of datafiles
 resolution  = size(OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', 1));
-npixels     = 64;   % number of pixels in one dimension (assuming rectangular image)
+nxpixels    = resolution(2);   % number of pixels in x direction
+nypixels    = resolution(1);   % number of pixels in y direction
 
 % Making a point spread function
 psf = @(xs, ys, sg, int, b, x, y)((int/(2*pi*(sg^2)))*exp(-((x-xs).^2 + (y-ys).^2)/(2*(sg^2)))+b); 
@@ -22,19 +25,13 @@ dfdsg = @(xs, ys, sg, int, b, x, y)((int*exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^
 dfdin = @(xs, ys, sg, int, b, x, y)exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(2*sg^2*pi);
 dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 
-% Empty array to store all localizations
-loc_molecules = [];%zeros(Nfiles, 5); 
-
-% Array to store accuracy of localization in each frame
-acc     = zeros(Nfiles, 5);
-
 % Empty array for reconstruction
-tot_im = [zeros(730, 730)];
+tot_im  = zeros((nypixels+9)*im_px/rec_px, (nxpixels+9)*im_px/rec_px);
 
+% Array to store accuracy information
+acc     = zeros(Nfiles, 3);
 
-lastwarn(['a','b']);
 for iter = 1:Nfiles
-
 
     % Open the image
     imageData = OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', iter);
@@ -43,21 +40,19 @@ for iter = 1:Nfiles
     centroids = segment_frame(imageData);
 
     % Skip current loop iteration if no molecules are present (lots of
-    % detections)
+    % detections) (The following lines can probably be removed)
     if sum(isnan(centroids), 'all')>0
         continue
     end
 
-
     % Localization
-    localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
+    localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
     
     % Check if any warnings are given
     [warnmsg, msgid] = lastwarn;
     
     % If the warning is about an ill conditioned matrix, skip the frame
-    % (Gives NaN as fitting parameters, which screws up the
-    % reconstruction)
+    % (Gives NaN as fitting parameters, which makes the reconstruction a black screen)
     if strcmp(msgid,'MATLAB:illConditionedMatrix')
         
         % Reset the warning
@@ -70,55 +65,42 @@ for iter = 1:Nfiles
         continue
     end
     
-    xc = localizations(:, 1)*a;
-    yc = localizations(:, 2)*a;
-
-    % Store localization and frame number in one big array
-    %loc_molecules = [loc_molecules; [localizations]];
+    xc = localizations(:, 1)*im_px;
+    yc = localizations(:, 2)*im_px;
 
     % Cramer-Rao lower bound calculation
-    N     = sum(imageData, 'all');                            % [-] Number of signal photons 
-    sigg  = mean(localizations(3))*a;                         % Converting std. of PSF to m from pixels
-    sige2 = (sigg^2) + ((a^2)/12);         
-    tau   = 2*pi*(sige2)*mean(localizations(4))/(N*(a^2));    % [-] Dimensionless background parameter
-
+    N     = mean(localizations(:, 6)):                                  % [-] Number of signal photons 
+    sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
+    sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
+    tau   = 2*pi*(sige2)*mean(localizations(4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
+    
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
 
-    % Mortensen lower bound
-    dx_ls = sqrt((sigg^2 + ((a^2)/12))*((16/9) + (4*tau))/N)/1e-9;
-
-    % Compare the results to the ground truth
-    %[comp, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
-
-
-    % Store the CRLB and comparison to the ground truth
-    %acc(iter, :) = [dx, comp, missed, Nmol, iter];
+    % Store some statistics
+    acc(iter, :) = [iter, dx, mean(localizations(4))];
     
-    tot_im = reconstruct(tot_im, localizations, 100, new_px, npixels);
+    % Add the localization data to the reconstructed image
+    tot_im = reconstruct(tot_im, localizations, 100, rec_px, nxpixels, nypixels);
 
     % Print progress
     progress = string(iter/Nfiles*100) + '% done';
     disp(progress)
-    iter;
 end
 
-% Average accuracy relative to CRLB
-%rel_acc = mean((acc(:, 2)./acc(:, 1))*Nmol);
-
-
-% Total number of missed detections
-%tot_miss = sum(acc(:, 3));
-
-% Relative accuracy for each frame
-%bar(acc(:, 2)./acc(:, 1))
+% Test statistics
+figure(1)
+histogram(acc(:, 2))
 
 %%%%%%%%
 axis equal
+figure(2)
 imshow(tot_im)
+
+% Execution time
 toc
 
-function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, a,...
+function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter,...
     dfdxs, dfdys, dfdsg, dfdin, psf, resolution)
 
 X = linspace(1, xsize, xsize);
@@ -140,7 +122,7 @@ origin = round(centroids) - [xsize/2, ysize/2];
 
 L = size(centroids);
 
-localizations = zeros(L(1), 6);
+localizations = zeros(L(1), 7);
 
 for i = 1:L(1)
     
@@ -259,7 +241,7 @@ end
     Int = B(4);
     
     
-    localizations(i, :) = [xs, ys, sg, b, iter, Int];
+    localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     
     
 end

@@ -69,7 +69,7 @@ for iter = 1:Nfiles
     yc = localizations(:, 2)*im_px;
 
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6)):                                  % [-] Number of signal photons 
+    N     = mean(localizations(:, 6)) - mean(localizations(:,3));       % [-] Number of signal photons 
     sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter

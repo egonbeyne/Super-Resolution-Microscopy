@@ -7,10 +7,10 @@ im_px       = 100;      %[nm] Pixel size
 rec_px      = 10;       %[nm] accuracy of reconstructed image
 xsize       = 4;        %[px] size of fitting region in x
 ysize       = 4;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_2\';
 GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
-Nfiles      = 19996;   %Number of datafiles
-resolution  = size(OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', 1));
+Nfiles      = 2400;   %Number of datafiles
+resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
 
@@ -37,10 +37,10 @@ loc_mol = zeros(20000, 3);
 for iter = 1:Nfiles
 
     % Open the image
-    imageData = OpenIm('C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\', iter);
+    imageData = OpenIm(dataLoc, iter);
 
     % Segmenting the data
-    centroids = segment_frame(imageData);
+    centroids = segment_frame(imageData, im_px);
 
     % Skip current loop iteration if no molecules are present (lots of
     % detections) (The following lines can probably be removed)
@@ -52,16 +52,16 @@ for iter = 1:Nfiles
     localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
     
     % Check if any warnings are given
-    [warnmsg, msgid] = lastwarn;
+    %[warnmsg, msgid] = lastwarn;
     
     % If the warning is about an ill conditioned matrix, skip the frame
     % (Gives NaN as fitting parameters, which makes the reconstruction a black screen)
-    if strcmp(msgid,'MATLAB:illConditionedMatrix')
+    %if strcmp(msgid,'MATLAB:illConditionedMatrix')
         
         % Reset the warning
-        lastwarn(['','']);
-        continue
-    end
+        %lastwarn(['','']);
+        %continue
+    %end
     
     % Stop current iteration if no localizations are present
     if size(localizations, 1)==0
@@ -130,7 +130,6 @@ end
 
 %%%%%%%%
 axis equal
-figure(2)
 imshow(tot_im)
 
 % Compute the accuracy
@@ -168,11 +167,10 @@ for i = 1:L(1)
     % Extract coordinates of the origin of one region of interest
     roi = origin(i, :);
     
-    
     % Prevent the search domain being outside the image
     roi(1) = min(max(roi(1), 1), resolution(1)- ysize+1);
-    roi(2) = min(max(roi(2), 1), resolution(2) - xsize +1);
-       
+    roi(2) = min(max(roi(2), 1), resolution(2) - xsize+1);
+    
     % Select pixel data in the region of interest
     localData = imageData(roi(2):(roi(2)+xsize-1), roi(1):(roi(1)+ysize-1));
 
@@ -210,7 +208,7 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 1000;
+L_0 = 3;
 v   = 1.5;
 
 while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
@@ -251,6 +249,20 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     step_0 = (jtj + L_0*dtd)\res;
     step_v = (jtj + (L_0/v)*dtd)\res;
     
+    
+    % Check if any warnings are given
+    [~, msgid] = lastwarn;
+    
+    % If the warning is about an ill conditioned matrix, skip the
+    % localization (diverging fit)
+    if strcmp(msgid,'MATLAB:illConditionedMatrix')
+        
+        % Reset the warning
+        lastwarn(['','']);
+        B = [0;0;0;0;0];
+        continue
+    end
+    
     % Update the function parameters
     B_0  = B + step_0;
     B_v  = B + step_v;
@@ -285,6 +297,8 @@ end
     
 end
 
+% Remove diverged fittings
+localizations(localizations(:, 1) == 0, :) = [];
 
 % Filter out localizations using a molecule that is too dim
 localizations(localizations(:, 6)<5e3,:) = [];

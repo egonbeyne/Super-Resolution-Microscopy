@@ -32,7 +32,7 @@ tot_im  = zeros((nypixels+9)*im_px/rec_px, (nxpixels+9)*im_px/rec_px);
 acc     = zeros(Nfiles, 3);
 
 % Array to store localizations
-loc_mol = [];
+loc_mol = zeros(20000, 3);
 
 for iter = 1:Nfiles
 
@@ -68,12 +68,46 @@ for iter = 1:Nfiles
         continue
     end
     
-    xc = localizations(:, 1)*im_px;
-    yc = localizations(:, 2)*im_px;
+    % Total number of localizations
+    Nloc = sum(loc_mol(:, 3));
     
-    % Store locations to compare with ground truth
-    loc_mol = [loc_mol; [xc, yc]];
+    % Copy the localization array, to avoid error in for loop
+    local = localizations;
 
+    % Check for molecules that are on in consecutive frames
+    for j = 1:size(localizations, 1)
+    
+      % Distance from other localizations (only checks the last 10)
+      diff = sqrt(sum((loc_mol(max(Nloc-10, 1):Nloc, 1:2)-(localizations(j, 1:2)*im_px)).^2, 2));
+
+      % Check if distance to other localizations is smaller than a
+      % threshold
+      thr   = 6;                 %[nm] Threshold
+      index = any(diff<thr, 2);
+      
+      % If multiple localizations are within the threshold, remove the new
+      % localization (For future version, average could be added)
+      if sum(index)>=1
+          localizations(j, :) = [0, 0, 0, 0, 0, 0];
+      end
+    end
+    
+    % Remove zeros from localization
+    localizations(~any(localizations,2), : ) = [];
+   
+    if size(localizations, 1) ==0
+        continue
+    end
+    
+    % Number of localizations in the current frame
+    Nfr  = size(localizations, 1);
+        
+    % Store localizations, also add one to each filled in row, to count the
+    % number of filled rows
+    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, ones(Nfr, 1)];
+
+    
+    
     % Cramer-Rao lower bound calculation
     N     = mean(localizations(:, 6));       % [-] Number of signal photons 
     sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
@@ -93,10 +127,6 @@ for iter = 1:Nfiles
     progress = string(iter/Nfiles*100) + '% done';
     disp(progress)
 end
-
-% Test statistics
-figure(1)
-histogram(acc(:, 2))
 
 %%%%%%%%
 axis equal
@@ -276,10 +306,10 @@ C      = zeros(size(gt, 1), 1);
 
 % Iterate through ground truth and find the closest localization to each
 % ground truth molecule.
-for k=1:size(gt)
+for k=1:size(gt, 1)
     
   % value and index of minimum error
-  [val,idx]=min(sqrt(sum((gt(:, 1:2)-loc_mol(k, :)).^2, 2)));
+  [val,idx] = min(sqrt(sum((gt(:, 1:2)-loc_mol(k, 1:2)).^2, 2)));
   
   % Store the error
   C(k)=val;

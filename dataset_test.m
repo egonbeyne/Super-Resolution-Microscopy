@@ -2,20 +2,17 @@ clear all;
 tic
 
 % Constants
-im_px       = 100;      %[nm] Pixel size
-rec_px      = 10;       %[nm] accuracy of reconstructed image
+im_px       = 100;      %[nm] Pixel size of frames
+rec_px      = 5;       %[nm] pixel size of reconstructed image
 xsize       = 4;        %[px] size of fitting region in x
 ysize       = 4;        %[px] size of fitting region in y
 % dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_2\';
 dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
+Nfiles = length( dir(dataLoc)) - 2;
 % GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
-Nfiles      = 2400;   %Number of datafiles
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-
-
-
 psf_pixels = 9;     %size of psf_block
 
 % Making a point spread function
@@ -30,7 +27,7 @@ dfdin = @(xs, ys, sg, int, b, x, y)exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(
 dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 
 % Empty array for reconstruction
-tot_im  = zeros((nypixels+9)*im_px/rec_px, (nxpixels+9)*im_px/rec_px);
+tot_im  = zeros((nypixels+psf_pixels)*im_px/rec_px, (nxpixels+psf_pixels)*im_px/rec_px);
 
 % Array to store accuracy information
 acc     = zeros(Nfiles, 3);
@@ -125,7 +122,7 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(4))];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, 100, rec_px, nxpixels);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels);
 
     % Print progress
     progress = string(iter/Nfiles*100) + '% done';

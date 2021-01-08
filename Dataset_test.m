@@ -1,18 +1,22 @@
-
 clear all;
 tic
 
 % Constants
-im_px       = 100;      %[nm] Pixel size
-rec_px      = 10;       %[nm] accuracy of reconstructed image
-xsize       = 4;        %[px] size of fitting region in x
-ysize       = 4;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_2\';
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
-Nfiles      = 2400;   %Number of datafiles
+im_px       = 100;      %[nm] Pixel size of frames
+rec_px      = 10;       %[nm] pixel size of reconstructed image
+xsize       = 5;        %[px] size of fitting region in x
+ysize       = 5;        %[px] size of fitting region in y
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
+Nfiles      = length( dir(dataLoc)) - 2;
+% GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
+psf_pixels  = 9;     %size of psf_block
+last_prog   = -1;              % Progress indicator
+
+warning('off', 'all');
 
 % Making a point spread function
 psf = @(xs, ys, sg, int, b, x, y)((int/(2*pi*(sg^2)))*exp(-((x-xs).^2 + (y-ys).^2)/(2*(sg^2)))+b); 
@@ -26,7 +30,7 @@ dfdin = @(xs, ys, sg, int, b, x, y)exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(
 dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 
 % Empty array for reconstruction
-tot_im  = zeros((nypixels+9)*im_px/rec_px, (nxpixels+9)*im_px/rec_px);
+tot_im  = zeros((nypixels+psf_pixels)*im_px/rec_px, (nxpixels+psf_pixels)*im_px/rec_px);
 
 % Array to store accuracy information
 acc     = zeros(Nfiles, 3);
@@ -42,26 +46,16 @@ for iter = 1:Nfiles
     % Segmenting the data
     centroids = segment_frame(imageData, im_px);
 
-    % Skip current loop iteration if no molecules are present (lots of
-    % detections) (The following lines can probably be removed)
-    if sum(isnan(centroids), 'all')>0
+    % Skip current loop iteration if no molecules are present
+    if sum(isnan(centroids), 'all')>0 || size(centroids, 1) == 0
+        %imshow(10*uint16(imageData))
+        %error('stop')
         continue
     end
 
     % Localization
     localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
-    
-    % Check if any warnings are given
-    %[warnmsg, msgid] = lastwarn;
-    
-    % If the warning is about an ill conditioned matrix, skip the frame
-    % (Gives NaN as fitting parameters, which makes the reconstruction a black screen)
-    %if strcmp(msgid,'MATLAB:illConditionedMatrix')
-        
-        % Reset the warning
-        %lastwarn(['','']);
-        %continue
-    %end
+   
     
     % Stop current iteration if no localizations are present
     if size(localizations, 1)==0
@@ -121,19 +115,22 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(4))];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, 100, rec_px, nxpixels, nypixels);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels);
 
     % Print progress
-    progress = string(iter/Nfiles*100) + '% done';
-    disp(progress)
+    prog = int16(iter/Nfiles*100);
+    if prog ~= last_prog
+        disp(string(prog) + '% done ')
+    end
+    last_prog = prog;
 end
 
 %%%%%%%%
 axis equal
-imshow(tot_im)
+imshow(tot_im*60,hot(40))
 
 % Compute the accuracy
-comp = groundtruth_combined(loc_mol, GtLoc);
+% comp = groundtruth_combined(loc_mol, GtLoc);
 
 % Execution time
 toc
@@ -156,7 +153,7 @@ yi = d(:, 2);
 
 % Coordinates for the origin of the local coordinate system in each region
 % of interest
-origin = round(centroids) - [xsize/2, ysize/2];
+origin = round(centroids) - [(xsize+1)/2, (ysize+1)/2];
 
 L = size(centroids);
 
@@ -168,12 +165,13 @@ for i = 1:L(1)
     roi = origin(i, :);
     
     % Prevent the search domain being outside the image
-    roi(1) = min(max(roi(1), 1), resolution(1)- ysize+1);
-    roi(2) = min(max(roi(2), 1), resolution(2) - xsize+1);
+    roi(1) = min(max(roi(1), 1), resolution(1)- ysize);
+    roi(2) = min(max(roi(2), 1), resolution(2) - xsize);
     
     % Select pixel data in the region of interest
-    localData = imageData(roi(2):(roi(2)+xsize-1), roi(1):(roi(1)+ysize-1));
-
+    localData = imageData((roi(2)+1):(roi(2)+xsize), (roi(1)+1):(roi(1)+ysize));
+    
+    
     % rearranging ROI
     Ii  = transpose(localData);
     I = Ii(:);
@@ -185,8 +183,8 @@ for i = 1:L(1)
     fi = Ii(:);
 
 % Initial guesses for x and y
-xin = centroids(i, 2) - roi(2);
-yin = centroids(i, 1) - roi(1);
+xin = centroids(i, 1) - roi(1);
+yin = centroids(i, 2) - roi(2);
 
 % Initial guess for intensity (based on the sum of the intensity in the
 % local frame
@@ -208,7 +206,7 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 3;
+L_0 = 1000;
 v   = 1.5;
 
 while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
@@ -253,14 +251,32 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     % Check if any warnings are given
     [~, msgid] = lastwarn;
     
-    % If the warning is about an ill conditioned matrix, skip the
-    % localization (diverging fit)
-    if strcmp(msgid,'MATLAB:illConditionedMatrix')
+    % If the fitting produces an ill conditioned matrix, or the fluorophore
+    % is not bright enough, stop iteration
+    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<xsize*ysize*100
         
-        % Reset the warning
-        lastwarn(['','']);
+        if strcmp(msgid,'MATLAB:illConditionedMatrix')
+            % Reset the warning
+            lastwarn(['','']);
+            disp('ill conditioned matrix')
+            %figure(1)
+            %imshow(uint16(localData)*30, 'InitialMagnification', 800);
+            %hold on
+            %axis on
+            %plot(xin, yin, 'r+')
+            %figure(2)
+            %imshow(uint16(imageData)*30);
+            %hold on
+            %axis on
+            %plot(centroids(:,1), centroids(:,2), 'r+')
+            %pause(5)
+        else
+            disp('too dim')
+        end
+        
         B = [0;0;0;0;0];
-        continue
+        
+        break
     end
     
     % Update the function parameters
@@ -298,7 +314,7 @@ end
 end
 
 % Remove diverged fittings
-localizations(localizations(:, 1) == 0, :) = [];
+localizations((localizations(:, 1) <= 0)|(localizations(:, 2) <=0), :) = [];
 
 % Filter out localizations using a molecule that is too dim
 localizations(localizations(:, 6)<5e3,:) = [];
@@ -306,7 +322,9 @@ localizations(localizations(:, 6)<5e3,:) = [];
 % Filter out double localizations
 localizations(localizations(:, 3)<0.5,:) = [];
 
-localizations(:, 6) = [];
+localizations(sum(isnan(localizations), 'all')>0, :) = [];
+
+localizations(:, 7) = [];
 
 end
 

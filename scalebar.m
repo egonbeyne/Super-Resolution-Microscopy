@@ -1,4 +1,4 @@
-function [] = scalebar(imageName,pixelSize,barScale,units)
+function scalebar(imageName,pixelSize,barScale,units)
 
 %sets a scale bar in the image: imageName = tot_im
 %pixelSize = rec_px;

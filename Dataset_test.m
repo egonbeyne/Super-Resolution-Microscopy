@@ -9,7 +9,7 @@ ysize       = 5;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-% GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
@@ -82,7 +82,7 @@ for iter = 1:Nfiles
       % If multiple localizations are within the threshold, remove the new
       % localization (For future version, average could be added)
       if sum(index)>=1
-          localizations(j, :) = [0, 0, 0, 0, 0, 0];
+          localizations(j, :) = [0, 0, 0, 0, 0, 0, 0];
       end
     end
     
@@ -103,7 +103,7 @@ for iter = 1:Nfiles
     
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6));       % [-] Number of signal photons 
+    N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons 
     sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
@@ -129,8 +129,11 @@ end
 axis equal
 imshow(tot_im*60,hot(40))
 
+% remove zero elements from the molecule locations
+loc_mol(~any(loc_mol, 2), :) = [];
+
 % Compute the accuracy
-% comp = groundtruth_combined(loc_mol, GtLoc);
+comp = groundtruth_combined(loc_mol, GtLoc);
 
 % Execution time
 toc
@@ -178,7 +181,7 @@ for i = 1:L(1)
 
     % Calculating the weights (assuming poissoning noise, based on
     % (Jiaqing,2016))
-    w = max(I.^-1, .005);
+    w = max(I.^-1, .0001);
 
     fi = Ii(:);
 
@@ -206,10 +209,10 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 1000;
+L_0 = 2;
 v   = 1.5;
 
-while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
+while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
 
     % Counting iterations
     it = it + 1;
@@ -235,13 +238,16 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     J = [dfdxs_0, dfdys_0, dfdsg_0, dfdin_0, dfdb_0];
     JT = transpose(J);
     
+    % Weights
+    W = eye(length(xi)).*w;
+    
     % Residuals
-    res = (JT*((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
-    jtj = JT*J;
+    res = (JT*W*((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
+    jtj = JT*W*J;
     
     % Damping matrix according to 'Improvements to the Levenberg-Marquardt algorithm for nonlinear
     %least-squares minimization'
-    dtd = eye(5)*diag(jtj);
+    dtd = eye(5).*diag(jtj);
     
     % Calculate the step size
     step_0 = (jtj + L_0*dtd)\res;
@@ -291,18 +297,26 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     if S_0>Si && S_v>Si
         L_0 = v*L_0;
         B   = B + ((jtj + L_0*dtd)\res);
+        step = ((jtj + L_0*dtd)\res);
     else if S_0>S_v
             B = B_0;
+            step = step_0;
         else
             B = B_v;
             L_0 = L_0/v;
+            step = step_v;
         end
     end
             
 end
+    %imshow(uint16(imageData)*30);
+    %hold on
+    %axis on
+    %plot(centroids(:,1), centroids(:,2), 'r+')
+    %pause(5)
     
-    xs  = B(1) + roi(1) - 1.5; % +0.5 is necessary because pixel count starts at one in the local frame
-    ys  = B(2) + roi(2) - 1.5; % and because the center of a pixel is where the count starts
+    xs  = B(1) + roi(1) - 0.5; % +0.5 is necessary because pixel count starts at one in the local frame
+    ys  = B(2) + roi(2) - 0.5; % and because the center of a pixel is where the count starts
     sg  = B(3);
     b   = B(5);
     Int = B(4);
@@ -324,7 +338,7 @@ localizations(localizations(:, 3)<0.5,:) = [];
 
 localizations(sum(isnan(localizations), 'all')>0, :) = [];
 
-localizations(:, 7) = [];
+%localizations(:, 7) = [];
 
 end
 
@@ -338,6 +352,7 @@ C      = zeros(size(gt, 1), 1);
 
 % Iterate through ground truth and find the closest localization to each
 % ground truth molecule.
+
 for k=1:size(gt, 1)
     
   % value and index of minimum error
@@ -349,6 +364,9 @@ for k=1:size(gt, 1)
   % Remove entry from ground truth
   gt(idx, :)=[];
 end
+
+% Trim zero values
+C(~any(C), :) = [];
 
 % Compute the average accuracy, excluding outliers
 comp = trimmean(C, 99.5);

@@ -9,10 +9,10 @@ image = imageName;
 
 %plot a scale bar
 scaleBarWidth = floor( 1/(pixelSize) * barScale);
-scaleBarHeight = floor( 1/(pixelSize) * barScale)/90;
+scaleBarHeight = floor( 1/(pixelSize) * barScale)/30;
 
-xPos = size(image,2)*0.95 - scaleBarWidth;
-yPos = size(image,1)*0.95 - scaleBarHeight;
+xPos = size(image,2)*0.90 - scaleBarWidth;
+yPos = size(image,1)*0.90 - scaleBarHeight;
 textCenterX = xPos + floor(scaleBarWidth/2);
 textCenterY = yPos + scaleBarHeight*5;
 rectPosition = [xPos, yPos, scaleBarWidth, scaleBarHeight];

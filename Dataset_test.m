@@ -13,7 +13,7 @@ GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  =  7;               %size of psf_block
+psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
 warning('off', 'all');
@@ -21,6 +21,8 @@ warning('off', 'all');
 % Making a point spread function
 psf = @(xs, ys, sg, int, b, x, y)((int/(2*pi*(sg^2)))*exp(-((x-xs).^2 + (y-ys).^2)/(2*(sg^2)))+b); 
 
+%init reconstruction, makes psf block
+psf_block = init_reconstruct(rec_px);
 
 % Convert derivatives to normal functions for speed
 dfdxs = @(xs, ys, sg, int, b, x, y)(int*exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2)).*(2*x - 2*xs))/(4*sg^4*pi);
@@ -94,7 +96,7 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(4))];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
 
     % Print progress
     prog = int16(iter/Nfiles*100);
@@ -104,12 +106,12 @@ for iter = 1:Nfiles
     last_prog = prog;
 end
 
-%%%%%%%%
-axis equal
-imshow(tot_im*60,hot(25))
-hold on
-scalebar(tot_im,rec_px,1000,'nm')
+%%%%%%%%show the image
 
+imshow(tot_im*60,hot(25));
+scalebar(tot_im,rec_px,1000,'nm');
+
+%%%%%%%%
 % remove zero elements from the molecule locations
 loc_mol(~any(loc_mol, 2), :) = [];
 
@@ -492,5 +494,3 @@ imageData = double(read(t));
 close(t);
 
 end
-
-

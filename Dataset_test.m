@@ -2,18 +2,18 @@ clear all;
 tic
 
 % Constants
-im_px       = 150;      %[nm] Pixel size of frames
+im_px       = 100;      %[nm] Pixel size of frames
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-%dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
-dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\ER2.N3.HD\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-% GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  = 7;               %size of psf_block
+psf_pixels  =  7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
 warning('off', 'all');
@@ -63,28 +63,8 @@ for iter = 1:Nfiles
     end
     
     % Total number of localizations
-    Nloc = sum(loc_mol(:, 3));
+    Nloc = nnz(loc_mol(:, 3));
     
-    % Copy the localization array, to avoid error in for loop
-    local = localizations;
-
-    % Check for molecules that are on in consecutive frames
-    for j = 1:size(localizations, 1)
-    
-      % Distance from other localizations (only checks the last 10)
-      diff = sqrt(sum((loc_mol(max(Nloc-10, 1):Nloc, 1:2)-(localizations(j, 1:2)*im_px)).^2, 2));
-
-      % Check if distance to other localizations is smaller than a
-      % threshold
-      thr   = 6;                 %[nm] Threshold
-      index = any(diff<thr, 2);
-      
-      % If multiple localizations are within the threshold, remove the new
-      % localization (For future version, average could be added)
-      if sum(index)>=1
-          localizations(j, :) = [0, 0, 0, 0, 0, 0];
-      end
-    end
     
     % Remove zeros from localization
     localizations(~any(localizations,2), : ) = [];
@@ -96,14 +76,13 @@ for iter = 1:Nfiles
     % Number of localizations in the current frame
     Nfr  = size(localizations, 1);
         
-    % Store localizations, also add one to each filled in row, to count the
-    % number of filled rows
-    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, ones(Nfr, 1)];
+    % Store localizations, also add the frame number
+    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
 
     
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6));       % [-] Number of signal photons 
+    N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons 
     sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
@@ -125,17 +104,79 @@ for iter = 1:Nfiles
     last_prog = prog;
 end
 
-%%%%%%%%plot result
-axis equal
-
-imshow(tot_im*60,hot(30))
-
-scalebar(tot_im,rec_px,1000,'nm')
 %%%%%%%%
+axis equal
+imshow(tot_im*60,hot(25))
+hold on
+scalebar(tot_im,rec_px,1000,'nm')
 
+% remove zero elements from the molecule locations
+loc_mol(~any(loc_mol, 2), :) = [];
+
+
+% Progress report
+disp("Checking for double localizations... ")
+
+% Checking for molecules that are on in consecutive frames
+% guess for number of consecutive frames (best to take high enough)
+Ndoubleframes = 10;
+
+% Array to store how many frames a localization is on
+N_on          = zeros(Nloc);
+
+% Threshold to consider 2 localization from the same molecule (in nm)
+thr           = 10;
+
+% Loop through all frames
+for i = 1:Nfiles
+    % Select localization of 1 frame, to check with 10 consecutive frames
+    local = loc_mol(loc_mol(:, 3) == i, :);
+    %i
+    % Loop through all localizations in the selected frame
+    for j = 1:size(local, 1)
+        %j
+        % array to attach doubles to
+        doubles = local(j, 1:2);  
+        
+        % Loop through frames to be checked (10 consecutive frames)
+        for k = (1+i):(Ndoubleframes+i)
+            
+            % Select frame to be checked
+            fr = loc_mol(loc_mol(:, 3) == k, :);
+            
+            % Calculate distance to localization
+            [diff, index] = min(sqrt(sum((fr(:, 1:2) - local(j, 1:2)).^2   , 2)));
+            
+            if diff<thr
+                
+                % Store doubles together
+                doubles = [doubles; fr(index, 1:2)];
+                
+                % Remove localization from other frames ( Will be replaced
+                % by average later)
+                fr(index, :) = [0, 0, k];
+         
+            end
+            % Replace checked frame by frame with removed doubles
+            loc_mol(loc_mol(:, 3)==k, :) = fr;
+        end
+        
+        % Calculate the average from all doubles
+        avg_loc = mean(doubles, 1);
+        
+        % on-time of the fluorophore
+        t_on    = size(doubles, 1);
+        N_on(i) = t_on;
+        
+        % replace with average
+        local(j, 1:2) = avg_loc;
+    end
+end
+
+histogram(nonzeros(N_on))
 % Compute the accuracy
-% comp = groundtruth_combined(loc_mol, GtLoc);
-
+comp = groundtruth_combined(loc_mol, GtLoc);
+  
 % Execution time
 toc
 
@@ -182,7 +223,7 @@ for i = 1:L(1)
 
     % Calculating the weights (assuming poissoning noise, based on
     % (Jiaqing,2016))
-    w = max(I.^-1, .005);
+    w = max(I.^-1, .0001);
 
     fi = Ii(:);
 
@@ -210,10 +251,10 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 1000;
+L_0 = 2;
 v   = 1.5;
 
-while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
+while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
 
     % Counting iterations
     it = it + 1;
@@ -239,13 +280,16 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     J = [dfdxs_0, dfdys_0, dfdsg_0, dfdin_0, dfdb_0];
     JT = transpose(J);
     
+    % Weights
+    W = eye(length(xi)).*w;
+    
     % Residuals
-    res = (JT*((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
-    jtj = JT*J;
+    res = (JT*W*((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
+    jtj = JT*W*J;
     
     % Damping matrix according to 'Improvements to the Levenberg-Marquardt algorithm for nonlinear
     %least-squares minimization'
-    dtd = eye(5)*diag(jtj);
+    dtd = eye(5).*diag(jtj);
     
     % Calculate the step size
     step_0 = (jtj + L_0*dtd)\res;
@@ -295,18 +339,26 @@ while (step(1)^2 + step(2)^2)>0.0001 && it<maxIt
     if S_0>Si && S_v>Si
         L_0 = v*L_0;
         B   = B + ((jtj + L_0*dtd)\res);
+        step = ((jtj + L_0*dtd)\res);
     else if S_0>S_v
             B = B_0;
+            step = step_0;
         else
             B = B_v;
             L_0 = L_0/v;
+            step = step_v;
         end
     end
             
 end
+    %imshow(uint16(imageData)*30);
+    %hold on
+    %axis on
+    %plot(centroids(:,1), centroids(:,2), 'r+')
+    %pause(5)
     
-    xs  = B(1) + roi(1) - 1.5; % +0.5 is necessary because pixel count starts at one in the local frame
-    ys  = B(2) + roi(2) - 1.5; % and because the center of a pixel is where the count starts
+    xs  = B(1) + roi(1) - 0.5; % -0.5 is necessary because pixel count starts at one in the local frame
+    ys  = B(2) + roi(2) - 0.5; % and because the center of a pixel is where the count starts
     sg  = B(3);
     b   = B(5);
     Int = B(4);
@@ -328,7 +380,7 @@ localizations(localizations(:, 3)<0.5,:) = [];
 
 localizations(sum(isnan(localizations), 'all')>0, :) = [];
 
-localizations(:, 7) = [];
+%localizations(:, 7) = [];
 
 end
 
@@ -342,6 +394,7 @@ C      = zeros(size(gt, 1), 1);
 
 % Iterate through ground truth and find the closest localization to each
 % ground truth molecule.
+
 for k=1:size(gt, 1)
     
   % value and index of minimum error
@@ -353,6 +406,9 @@ for k=1:size(gt, 1)
   % Remove entry from ground truth
   gt(idx, :)=[];
 end
+
+% Trim zero values
+C(~any(C), :) = [];
 
 % Compute the average accuracy, excluding outliers
 comp = trimmean(C, 99.5);
@@ -436,3 +492,5 @@ imageData = double(read(t));
 close(t);
 
 end
+
+

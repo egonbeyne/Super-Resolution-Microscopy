@@ -63,11 +63,13 @@ for iter = 1:Nfiles
     end
     
     % Total number of localizations
-    Nloc = sum(loc_mol(:, 3));
+    Nloc = nnz(loc_mol(:, 3));
     
     % Copy the localization array, to avoid error in for loop
     local = localizations;
-
+    
+    
+    
     % Check for molecules that are on in consecutive frames
     for j = 1:size(localizations, 1)
     
@@ -96,9 +98,8 @@ for iter = 1:Nfiles
     % Number of localizations in the current frame
     Nfr  = size(localizations, 1);
         
-    % Store localizations, also add one to each filled in row, to count the
-    % number of filled rows
-    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, ones(Nfr, 1)];
+    % Store localizations, also add the frame number
+    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
 
     
     
@@ -132,9 +133,61 @@ imshow(tot_im*60,hot(40))
 % remove zero elements from the molecule locations
 loc_mol(~any(loc_mol, 2), :) = [];
 
+
+
+
+% Checking for molecules that are on in consecutive frames
+% guess for number of consecutive frames (best to take high enough)
+Ndoubleframes = 10;
+% Threshold to consider 2 localization from the same molecule (in nm)
+thr           = 10;
+
+% Loop through all frames
+for i = 1:Nfiles
+    % Select localization of 1 frame, to check with 10 consecutive frames
+    local = loc_mol(loc_mol(:, 3) == i, :);
+    %i
+    % Loop through all localizations in the selected frame
+    for j = 1:size(local, 1)
+        %j
+        % array to attach doubles to
+        doubles = local(j, 1:2);  
+        
+        % Loop through frames to be checked (10 consecutive frames)
+        for k = (1+i):(Ndoubleframes+i)
+            
+            % Select frame to be checked
+            fr = loc_mol(loc_mol(:, 3) == k, :);
+            
+            % Calculate distance to localization
+            [diff, index] = min(sqrt(sum((fr(:, 1:2) - local(j, 1:2)).^2   , 2)));
+            
+            if diff<thr
+                
+                % Store doubles together
+                doubles = [doubles; fr(index, 1:2)];
+                disp("double")
+                % Remove localization from other frames ( Will be replaced
+                % by average later)
+                fr(index, :) = [0, 0, k];
+         
+            end
+            % Replace checked frame by frame with removed doubles
+            loc_mol(loc_mol(:, 3)==k, :) = fr;
+        end
+        
+        % Calculate the average from all doubles
+        avg_loc = mean(doubles, 1);
+        
+        % replace with average
+        local(j, 1:2) = avg_loc;
+    end
+end
+
 % Compute the accuracy
 comp = groundtruth_combined(loc_mol, GtLoc);
 
+    
 % Execution time
 toc
 
@@ -315,7 +368,7 @@ end
     %plot(centroids(:,1), centroids(:,2), 'r+')
     %pause(5)
     
-    xs  = B(1) + roi(1) - 0.5; % +0.5 is necessary because pixel count starts at one in the local frame
+    xs  = B(1) + roi(1) - 0.5; % -0.5 is necessary because pixel count starts at one in the local frame
     ys  = B(2) + roi(2) - 0.5; % and because the center of a pixel is where the count starts
     sg  = B(3);
     b   = B(5);

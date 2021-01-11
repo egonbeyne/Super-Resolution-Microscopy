@@ -3,7 +3,7 @@
 
 function [total_image] = reconstruct(prev_image,locations,oldpixelsize,newpixelsize,npixels)
 
-psf_pixels = 9;    %5 is the middle pixel for location of psf
+psf_pixels = 7;    %5 is the middle pixel for location of psf
 xsize_psf = psf_pixels;
 ysize_psf = psf_pixels;
 

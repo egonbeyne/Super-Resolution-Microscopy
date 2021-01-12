@@ -13,7 +13,7 @@ GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  =  7;               %size of psf_block
+psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
 warning('off', 'all');
@@ -94,7 +94,7 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(4)), N];
     
     % Add the localization data to the reconstructed image
-    %tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
 
     % Print progress
     prog = int16(iter/Nfiles*100);
@@ -111,10 +111,10 @@ imshow(tot_im*60,hot(25))
 hold on
 scalebar(tot_im,rec_px,1000,'nm')
 
+%%%%%%%%
 % remove zero elements from the molecule locations
 loc_mol(~any(loc_mol, 2), :) = [];
 
-groundtruth_combined(loc_mol, GtLoc)
 
 % Progress report
 disp("Checking for double localizations... ")
@@ -273,7 +273,7 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 0.8;
+L_0 = 2;
 v   = 1.5;
 
 while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
@@ -385,25 +385,7 @@ end
     sg  = B(3);
     b   = B(5);
     Int = B(4);
-    if abs(B(1)-xin)>1
-        %{
-        figure(1)
-        imshow(uint16(localData)*30, 'InitialMagnification', 800);
-        hold on
-        axis on
-        plot(B(1), B(2), 'r+')
-        figure(2)
-        imshow(uint16(imageData)*30);
-        hold on
-        axis on
-        plot(B(1) + roi(1) - 0.5, B(2) + roi(2) - 0.5, 'r+')
-        pause(5)
-        
-        B(1)
-        xin
-        pause(5)
-        %}
-    end
+    
     
     localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     

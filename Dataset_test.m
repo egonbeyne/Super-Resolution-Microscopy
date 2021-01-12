@@ -6,15 +6,18 @@ im_px       = 100;      %[nm] Pixel size of frames
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth';%'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
 psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
+
+%init reconstruction, makes psf block                                        
+psf_block = init_reconstruct(rec_px);
 
 warning('off', 'all');
 
@@ -90,8 +93,10 @@ for iter = 1:Nfiles
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
     
+    comp1 = groundtruth(localizations, GtLoc, iter);
+    
     % Store some statistics
-    acc(iter, :) = [iter, dx, mean(localizations(4)), N];
+    acc(iter, :) = [iter, dx, comp1, N];
     
     % Add the localization data to the reconstructed image
     tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
@@ -193,8 +198,8 @@ histogram(CRLB)
 title("Cramer-Rao lower bound")
 xlim([0, 15])
 subplot(223)
-plot(acc(:, 1), acc(:, 3)/comp, 'r+')
-title("Background intensity")
+histogram((CRLB/comp).^-1)
+title("Cramer-Rao Bound scaled with accuracy")
 subplot(224)
 histogram(N_ph, 'NumBins', 10)
 title("Signal photons per fluorophore")
@@ -268,12 +273,12 @@ B     = [xin; yin; 1.5; Iin; bin];
 step = [4, 4];
 
 % Maximum number of iterations
-maxIt = 30;
+maxIt = 100;
 
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 2;
+L_0 = 1;
 v   = 1.5;
 
 while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
@@ -323,7 +328,7 @@ while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
     
     % If the fitting produces an ill conditioned matrix, or the fluorophore
     % is not bright enough, stop iteration
-    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<xsize*ysize*100
+    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<xsize*ysize*150
         
         if strcmp(msgid,'MATLAB:illConditionedMatrix')
             % Reset the warning
@@ -373,7 +378,19 @@ while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
     end
             
 end
-    
+%{
+    if it == 30
+        disp("max iterations reached")
+        figure(1)
+        imshow(uint16(localData)*30, 'InitialMagnification', 800);
+        hold on
+        axis on
+        plot(B(1), B(2), 'r+')
+        figure(2)
+        imshow(uint16(imageData)*30);
+        pause(5)
+    end
+    %}
     %imshow(uint16(imageData)*30);
     %hold on
     %axis on
@@ -393,7 +410,7 @@ end
 end
 
 % Remove diverged fittings
-%localizations((localizations(:, 1) <= 0)|(localizations(:, 2) <=0), :) = [];
+localizations((localizations(:, 1) <= -0.01)|(localizations(:, 2) <=-0.010), :) = [];
 
 % Filter out localizations using a molecule that is too dim
 %localizations(localizations(:, 6)<5e3,:) = [];
@@ -419,7 +436,7 @@ C      = zeros(size(gt, 1), 1);
 % ground truth molecule.
 
 for k=1:size(gt, 1)
-    
+  
   % value and index of minimum error
   [val,idx] = min(sqrt(sum((gt(:, 1:2)-loc_mol(k, 1:2)).^2, 2)));
   

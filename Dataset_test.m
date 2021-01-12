@@ -33,7 +33,7 @@ dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 tot_im  = zeros((nypixels+psf_pixels)*im_px/rec_px, (nxpixels+psf_pixels)*im_px/rec_px);
 
 % Array to store accuracy information
-acc     = zeros(Nfiles, 3);
+acc     = zeros(Nfiles, 4);
 
 % Array to store localizations
 loc_mol = zeros(20000, 3);
@@ -83,18 +83,18 @@ for iter = 1:Nfiles
     
     % Cramer-Rao lower bound calculation
     N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons 
-    sigg  = mean(localizations(3))*im_px*10^-9;                         % nm] width of blob converted to nm
+    sigg  = mean(localizations(:, 3))*im_px*10^-9;                         % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
-    tau   = 2*pi*(sige2)*mean(localizations(4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
+    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
     
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
-
+    
     % Store some statistics
-    acc(iter, :) = [iter, dx, mean(localizations(4))];
+    acc(iter, :) = [iter, dx, mean(localizations(4)), N];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels);
+    %tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels);
 
     % Print progress
     prog = int16(iter/Nfiles*100);
@@ -105,6 +105,7 @@ for iter = 1:Nfiles
 end
 
 %%%%%%%%
+figure(1)
 axis equal
 imshow(tot_im*60,hot(25))
 hold on
@@ -113,6 +114,7 @@ scalebar(tot_im,rec_px,1000,'nm')
 % remove zero elements from the molecule locations
 loc_mol(~any(loc_mol, 2), :) = [];
 
+groundtruth_combined(loc_mol, GtLoc)
 
 % Progress report
 disp("Checking for double localizations... ")
@@ -125,7 +127,7 @@ Ndoubleframes = 10;
 N_on          = zeros(Nloc);
 
 % Threshold to consider 2 localization from the same molecule (in nm)
-thr           = 10;
+thr           = 5;
 
 % Loop through all frames
 for i = 1:Nfiles
@@ -173,9 +175,28 @@ for i = 1:Nfiles
     end
 end
 
-histogram(nonzeros(N_on))
 % Compute the accuracy
 comp = groundtruth_combined(loc_mol, GtLoc);
+
+% Cramer-Rao Lower bound, without zeros
+CRLB = nonzeros(acc(:, 2));
+
+% number of signal photons 
+N_ph = nonzeros(acc(:, 4));
+
+figure(2)
+subplot(221)
+histogram(nonzeros(N_on))
+title("Number of frames fluorophore is on")
+subplot(222)
+histogram(CRLB)
+title("Cramer-Rao lower bound")
+subplot(223)
+plot(acc(:, 1), acc(:, 3)/comp, 'r+')
+title("Background intensity")
+subplot(224)
+histogram(N_ph, 'NumBins', 10)
+title("Signal photons per fluorophore")
   
 % Execution time
 toc
@@ -237,7 +258,7 @@ Iin = sum(localData, 'all');
 
 % Initial guess for b, based on average intensity of the entire image,
 % scaled with a factor 2 to account for fluorescent molecules
-bin = sum(imageData, 'all')/(resolution(1)*resolution(2)*2);
+bin = sum(imageData, 'all')/(resolution(1)*resolution(2)*1.5);
 
 % Initial guess for function parameters
 B     = [xin; yin; 1.5; Iin; bin];
@@ -251,7 +272,7 @@ maxIt = 30;
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 2;
+L_0 = 0.8;
 v   = 1.5;
 
 while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
@@ -351,6 +372,7 @@ while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
     end
             
 end
+    
     %imshow(uint16(imageData)*30);
     %hold on
     %axis on
@@ -362,7 +384,25 @@ end
     sg  = B(3);
     b   = B(5);
     Int = B(4);
-    
+    if abs(B(1)-xin)>1
+        %{
+        figure(1)
+        imshow(uint16(localData)*30, 'InitialMagnification', 800);
+        hold on
+        axis on
+        plot(B(1), B(2), 'r+')
+        figure(2)
+        imshow(uint16(imageData)*30);
+        hold on
+        axis on
+        plot(B(1) + roi(1) - 0.5, B(2) + roi(2) - 0.5, 'r+')
+        pause(5)
+        
+        B(1)
+        xin
+        pause(5)
+        %}
+    end
     
     localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     
@@ -370,13 +410,13 @@ end
 end
 
 % Remove diverged fittings
-localizations((localizations(:, 1) <= 0)|(localizations(:, 2) <=0), :) = [];
+%localizations((localizations(:, 1) <= 0)|(localizations(:, 2) <=0), :) = [];
 
 % Filter out localizations using a molecule that is too dim
-localizations(localizations(:, 6)<5e3,:) = [];
+%localizations(localizations(:, 6)<5e3,:) = [];
 
 % Filter out double localizations
-localizations(localizations(:, 3)<0.5,:) = [];
+%localizations(localizations(:, 3)<0.5,:) = [];
 
 localizations(sum(isnan(localizations), 'all')>0, :) = [];
 

@@ -9,7 +9,7 @@ ysize       = 5;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth';%'C:\Users\Egon Beyne\Downloads\positions.csv';
+GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
@@ -41,6 +41,7 @@ acc     = zeros(Nfiles, 4);
 % Array to store localizations
 loc_mol = zeros(20000, 3);
 
+
 for iter = 1:Nfiles
 
     % Open the image
@@ -58,7 +59,6 @@ for iter = 1:Nfiles
 
     % Localization
     localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
-   
     
     % Stop current iteration if no localizations are present
     if size(localizations, 1)==0
@@ -72,17 +72,11 @@ for iter = 1:Nfiles
     % Remove zeros from localization
     localizations(~any(localizations,2), : ) = [];
    
-    if size(localizations, 1) ==0
-        continue
-    end
-    
     % Number of localizations in the current frame
     Nfr  = size(localizations, 1);
         
     % Store localizations, also add the frame number
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
-
-    
     
     % Cramer-Rao lower bound calculation
     N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons 
@@ -92,11 +86,9 @@ for iter = 1:Nfiles
     
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
-    
-    comp1 = groundtruth(localizations, GtLoc, iter);
-    
+    [comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
     % Store some statistics
-    acc(iter, :) = [iter, dx, comp1, N];
+    acc(iter, :) = [iter, dx, mean(localizations(:, 3)), comp1];
     
     % Add the localization data to the reconstructed image
     tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
@@ -181,7 +173,7 @@ for i = 1:Nfiles
 end
 
 % Compute the accuracy
-comp = groundtruth_combined(loc_mol, GtLoc);
+comp = mean(acc(:, 4));%groundtruth_combined(loc_mol, GtLoc);
 
 % Cramer-Rao Lower bound, without zeros
 CRLB = nonzeros(acc(:, 2));
@@ -192,9 +184,13 @@ N_ph = nonzeros(acc(:, 4));
 figure(2)
 subplot(221)
 histogram(nonzeros(N_on))
+ylabel("Frequency")
+xlabel("# of frames on")
 title("Number of frames fluorophore is on")
 subplot(222)
 histogram(CRLB)
+ylabel("Frequency")
+xlabel("Cramer-Rao bound [nm]")
 title("Cramer-Rao lower bound")
 xlim([0, 15])
 subplot(223)
@@ -202,6 +198,8 @@ histogram((CRLB/comp).^-1)
 title("Cramer-Rao Bound scaled with accuracy")
 subplot(224)
 histogram(N_ph, 'NumBins', 10)
+ylabel("Frequency")
+xlabel("Number of signal photons")
 title("Signal photons per fluorophore")
   
 % Execution time
@@ -237,8 +235,8 @@ for i = 1:L(1)
     roi = origin(i, :);
     
     % Prevent the search domain being outside the image
-    roi(1) = min(max(roi(1), 1), resolution(1)- ysize);
-    roi(2) = min(max(roi(2), 1), resolution(2) - xsize);
+    roi(1) = min(max(roi(1), 1), resolution(2)- xsize);
+    roi(2) = min(max(roi(2), 1), resolution(1) - ysize);
     
     % Select pixel data in the region of interest
     localData = imageData((roi(2)+1):(roi(2)+xsize), (roi(1)+1):(roi(1)+ysize));
@@ -267,21 +265,25 @@ Iin = sum(localData, 'all');
 bin = sum(imageData, 'all')/(resolution(1)*resolution(2)*1.5);
 
 % Initial guess for function parameters
-B     = [xin; yin; 1.5; Iin; bin];
+B     = [xin; yin; 1; Iin; bin];
 
 % x and y step size to start up iterations (exaggerated)
 step = [4, 4];
 
 % Maximum number of iterations
-maxIt = 100;
+maxIt = 500;
 
 it = 0;
 
 % Damping for levenberg marquardt (Has to be tuned)
-L_0 = 1;
-v   = 1.5;
-
-while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
+L_o     = 2;
+v       = 1.5;
+h       = 0.1;
+up      = 20;
+down    = 5;
+L_0 = 4;
+alpha = 0.1;
+while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
 
     % Counting iterations
     it = it + 1;
@@ -293,8 +295,9 @@ while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
     int_0 = B(4);
     b_0   = B(5);
     
-    % Residuals at the initial guess
-    Si    = sum(((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi)).^2));
+    % Function value at current iteration
+    f   = psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi);
+    
 
     % Filling in initial guesses and datapoints 
     dfdxs_0  = dfdxs(xs_0, ys_0, sg_0, int_0, b_0, xi, yi);
@@ -311,99 +314,113 @@ while (step(1)^2 + step(2)^2)>1e-6 && it<maxIt
     W = eye(length(xi)).*w;
     
     % Residuals
-    res = (JT*W*((fi - psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi))));
+    res = JT*W*(fi - f);
     jtj = JT*W*J;
     
     % Damping matrix according to 'Improvements to the Levenberg-Marquardt algorithm for nonlinear
     %least-squares minimization'
     dtd = eye(5).*diag(jtj);
-    
+
     % Calculate the step size
-    step_0 = (jtj + L_0*dtd)\res;
-    step_v = (jtj + (L_0/v)*dtd)\res;
+    step = linsolve((jtj + L_0*dtd),res);
     
+    %%%% Geodesic %%%%
+    Bs   = B +  h*step;
+    fs   = psf(Bs(1), Bs(2), Bs(3), Bs(4), Bs(5), xi, yi);
+    
+    fvv  = 2*((fs-f)/h - J*step)/h;
+    
+    % Solve for acceleration
+    ag   = linsolve(J, -fvv);
+    
+    % Add accelerator to step size if convergence is nt slowed down
+    if 2*norm(ag)/norm(step)<= alpha
+        step = step + 0.5*ag;
+    end
+    %%%%%%%%%%%%%%%%%%
+    
+    % Update function parameters
+    Bn  = B + step;
+    
+    % Function value at new point
+    fh = psf(Bn(1), Bn(2), Bn(3), Bn(4), Bn(5), xi, yi);
+    
+    chi     = fi.'*W*fi  -  2*fi.'*W*f  +  f.'*W*f;
+    chid    = fi.'*W*fi  -  2*fi.'*W*fh  +  fh.'*W*fh;
+    rho     = (chi - chid)/(step.'*((L_0*dtd*step) + (JT*W*(fi - f))));
+    
+    % Use new parameters if the least squares improved
+    if rho>=0.8
+        B = Bn;
+        L_0 = L_0*max(0.333, 1 - (2*rho - 1)^3);%max(L_0/down, 1e-7);
+        v   = 2;
+        %disp("better")
+    else
+        
+        L_0 = v*L_0;%min(L_0*up, 1e7);
+        v   = 2*v;
+        %disp("worse")
+    end
+    
+    %{
+    xn      = xs_0   + h*step(1);
+    yn      = ys_0   + h*step(2);
+    sgn     = sg_0   + h*step(3);
+    intn    = int_0  + h*step(4);
+    bn      = b_0    + h*step(5);
+    
+    Bn = [step(1);step(2);step(3);step(4);step(5)];
+    %}
     
     % Check if any warnings are given
     [~, msgid] = lastwarn;
     
     % If the fitting produces an ill conditioned matrix, or the fluorophore
     % is not bright enough, stop iteration
-    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<xsize*ysize*150
+    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<numel(localData)*90
         
         if strcmp(msgid,'MATLAB:illConditionedMatrix')
             % Reset the warning
             lastwarn(['','']);
             disp('ill conditioned matrix')
-            %figure(1)
-            %imshow(uint16(localData)*30, 'InitialMagnification', 800);
-            %hold on
-            %axis on
-            %plot(xin, yin, 'r+')
-            %figure(2)
-            %imshow(uint16(imageData)*30);
-            %hold on
-            %axis on
-            %plot(centroids(:,1), centroids(:,2), 'r+')
-            %pause(5)
         else
             disp('too dim')
         end
-        
-        B = [0;0;0;0;0];
-        
+        B = [NaN;NaN;NaN;NaN;NaN];
         break
     end
     
-    % Update the function parameters
-    B_0  = B + step_0;
-    B_v  = B + step_v;
     
-    S_0 = sum(((fi - psf(B_0(1), B_0(2), B_0(3), B_0(4), B_0(5), xi, yi)).^2));
-    S_v = sum(((fi - psf(B_v(1), B_v(2), B_v(3), B_v(4), B_v(5), xi, yi)).^2));
     
-    % If both choices for damping parameter are worse, multiply by v and
-    % guess again
-    if S_0>Si && S_v>Si
-        L_0 = v*L_0;
-        B   = B + ((jtj + L_0*dtd)\res);
-        step = ((jtj + L_0*dtd)\res);
-    else if S_0>S_v
-            B = B_0;
-            step = step_0;
-        else
-            B = B_v;
-            L_0 = L_0/v;
-            step = step_v;
-        end
-    end
-            
+       
 end
-%{
-    if it == 30
-        disp("max iterations reached")
-        figure(1)
-        imshow(uint16(localData)*30, 'InitialMagnification', 800);
-        hold on
-        axis on
-        plot(B(1), B(2), 'r+')
-        figure(2)
-        imshow(uint16(imageData)*30);
-        pause(5)
+    if it==maxIt
+        disp('itmax reached')
     end
-    %}
-    %imshow(uint16(imageData)*30);
-    %hold on
-    %axis on
-    %plot(centroids(:,1), centroids(:,2), 'r+')
-    %pause(5)
     
     xs  = B(1) + roi(1) - 0.5; % -0.5 is necessary because pixel count starts at one in the local frame
     ys  = B(2) + roi(2) - 0.5; % and because the center of a pixel is where the count starts
     sg  = B(3);
     b   = B(5);
     Int = B(4);
-    
-    
+    %{
+    if sqrt((B(1) - xin)^2 + (B(2) - yin)^2)>1
+        figure(1)
+        imshow(uint16(localData)*30, 'InitialMagnification', 800);
+        hold on
+        axis on
+        plot(xin, yin, 'r+')
+        plot(B(1), B(2), 'bx')
+        Iin
+        numel(localData)*150
+        figure(2)
+        imshow(uint16(imageData)*30);
+        hold on
+        axis on
+        plot(centroids(:,1), centroids(:,2), 'r+')
+        pause(5)
+    end
+    %}
     localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     
     
@@ -418,11 +435,12 @@ localizations((localizations(:, 1) <= -0.01)|(localizations(:, 2) <=-0.010), :) 
 % Filter out double localizations
 %localizations(localizations(:, 3)<0.5,:) = [];
 
-localizations(sum(isnan(localizations), 'all')>0, :) = [];
+localizations(sum(isnan(localizations), 2)>0, :) = [];
 
 %localizations(:, 7) = [];
 
 end
+
 
 function comp = groundtruth_combined(loc_mol, groundtruth_loc)
 

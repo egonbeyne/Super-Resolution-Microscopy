@@ -6,15 +6,20 @@ im_px       = 100;      %[nm] Pixel size of frames
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\tubulin2D.tif';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
-Nfiles      = length( dir(dataLoc)) - 2;
+%Nfiles      = length( dir(dataLoc)) - 2;
+tiff_info   = imfinfo(dataLoc); % return tiff structure, one element per image
+tiff_stack  = imread(dataLoc, 1) ; % read in first image
+Nfiles      = size(tiff_info, 1);
+resolution  = size(tiff_stack);
 GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
-resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
 psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
+gain        = 0.5;
+offset      = 30;
 
 
 %init reconstruction, makes psf block                                        
@@ -43,12 +48,11 @@ acc     = zeros(Nfiles, 5);
 loc_mol = zeros(20000, 3);
 
 
-
 for iter = 1:Nfiles
 
     % Open the image
-    imageData = OpenIm(dataLoc, iter)/6;
-
+    imageData = (double(imread(dataLoc, iter))-offset)/gain; %OpenIm(dataLoc, iter)/6;
+    
     % Segmenting the data
     centroids = segment_frame(imageData, im_px);
 
@@ -79,7 +83,7 @@ for iter = 1:Nfiles
         
     % Store localizations, also add the frame number
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
-    localizations(:, 4)
+    localizations(:, 4);
     % Cramer-Rao lower bound calculation
     N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
     sigg  = mean(localizations(:, 3))*im_px*10^-9;                         % nm] width of blob converted to nm

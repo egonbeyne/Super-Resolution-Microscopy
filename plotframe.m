@@ -1,7 +1,7 @@
 
 
 % Opening the raw .tif image
-dir = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\00278.tif';
+dir = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\00025.tif';
 t = Tiff(dir, 'r');
 
 % Reading the image

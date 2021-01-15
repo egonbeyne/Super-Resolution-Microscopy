@@ -1,5 +1,5 @@
 % Opening the raw .tif image
-dir = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\eye2.0\sequence\00004.tif';
+dir = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\00667.tif';
 t = Tiff(dir,'r');
 
 % Reading the image

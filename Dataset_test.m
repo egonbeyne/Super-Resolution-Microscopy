@@ -9,7 +9,7 @@ ysize       = 5;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\poitions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
@@ -47,7 +47,7 @@ loc_mol = zeros(20000, 3);
 for iter = 1:Nfiles
 
     % Open the image
-    imageData = OpenIm(dataLoc, iter)/6;
+    imageData = OpenIm(dataLoc, iter);
 
     % Segmenting the data
     centroids = segment_frame(imageData, im_px);
@@ -79,18 +79,19 @@ for iter = 1:Nfiles
         
     % Store localizations, also add the frame number
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
-    localizations(:, 4)
+    
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
-    sigg  = mean(localizations(:, 3))*im_px*10^-9;                         % nm] width of blob converted to nm
+    N     = mean(localizations(:, 6)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
+    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
-    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
+    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
     
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
     
     %[comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
     comp1 = 1;
+    
     % Store some statistics
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     
@@ -303,7 +304,6 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     % Function value at current iteration
     f   = psf(xs_0, ys_0, sg_0, int_0, b_0, xi, yi);
     
-
     % Filling in initial guesses and datapoints 
     dfdxs_0  = dfdxs(xs_0, ys_0, sg_0, int_0, b_0, xi, yi);
     dfdys_0  = dfdys(xs_0, ys_0, sg_0, int_0, b_0, xi, yi);

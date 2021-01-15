@@ -3,7 +3,7 @@ tic
 
 % Constants
 im_px       = 100;      %[nm] Pixel size of frames
-rec_px      = 10;       %[nm] pixel size of reconstructed image
+rec_px      = 5;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\tubulin2D.tif';

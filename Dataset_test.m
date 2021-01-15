@@ -2,14 +2,14 @@ clear all;
 tic
 
 % Constants
-im_px       = 100;      %[nm] Pixel size of frames
+im_px       = 150;      %[nm] Pixel size of frames
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
@@ -33,10 +33,10 @@ dfdin = @(xs, ys, sg, int, b, x, y)exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(
 dfdb  = @(xs, ys, sg, int, b, x, y)(1);
 
 % Empty array for reconstruction
-tot_im  = zeros((nypixels+psf_pixels)*im_px/rec_px, (nxpixels+psf_pixels)*im_px/rec_px);
+tot_im  = zeros((nypixels+psf_pixels+2)*im_px/rec_px, (nxpixels+psf_pixels+2)*im_px/rec_px);
 
 % Array to store accuracy information
-acc     = zeros(Nfiles, 4);
+acc     = zeros(Nfiles, 5);
 
 % Array to store localizations
 loc_mol = zeros(20000, 3);
@@ -79,16 +79,18 @@ for iter = 1:Nfiles
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons 
+    N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
     sigg  = mean(localizations(:, 3))*im_px*10^-9;                         % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
     
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
-    [comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
+    
+    %[comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
+    comp1 = 1;
     % Store some statistics
-    acc(iter, :) = [iter, dx, mean(localizations(:, 3)), comp1];
+    acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     
     % Add the localization data to the reconstructed image
     tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
@@ -173,7 +175,8 @@ for i = 1:Nfiles
 end
 
 % Compute the accuracy
-comp = mean(acc(:, 4));%groundtruth_combined(loc_mol, GtLoc);
+%comp = mean(acc(:, 5));            % When using eye dataset
+comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
 
 % Cramer-Rao Lower bound, without zeros
 CRLB = nonzeros(acc(:, 2));
@@ -350,7 +353,7 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     rho     = (chi - chid)/(step.'*((L_0*dtd*step) + (JT*W*(fi - f))));
     
     % Use new parameters if the least squares improved
-    if rho>=0.8
+    if rho>=0.5
         B = Bn;
         L_0 = L_0*max(0.333, 1 - (2*rho - 1)^3);%max(L_0/down, 1e-7);
         v   = 2;
@@ -362,22 +365,13 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
         %disp("worse")
     end
     
-    %{
-    xn      = xs_0   + h*step(1);
-    yn      = ys_0   + h*step(2);
-    sgn     = sg_0   + h*step(3);
-    intn    = int_0  + h*step(4);
-    bn      = b_0    + h*step(5);
-    
-    Bn = [step(1);step(2);step(3);step(4);step(5)];
-    %}
     
     % Check if any warnings are given
     [~, msgid] = lastwarn;
     
     % If the fitting produces an ill conditioned matrix, or the fluorophore
     % is not bright enough, stop iteration
-    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<numel(localData)*90
+    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<numel(localData)*800
         
         if strcmp(msgid,'MATLAB:illConditionedMatrix')
             % Reset the warning
@@ -427,7 +421,8 @@ end
 end
 
 % Remove diverged fittings
-localizations((localizations(:, 1) <= -0.01)|(localizations(:, 2) <=-0.010), :) = [];
+localizations((localizations(:, 1) <= -1)|(localizations(:, 2) <=-1), :) = [];
+localizations((localizations(:, 1) >= resolution(2)+1)|(localizations(:, 2) >=resolution(1)+1), :) = [];
 
 % Filter out localizations using a molecule that is too dim
 %localizations(localizations(:, 6)<5e3,:) = [];

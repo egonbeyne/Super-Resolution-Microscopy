@@ -7,7 +7,7 @@ scaling = oldpixelsize/newpixelsize;
 psf_pixels = 7;
 
 %can be cleaned every molecule
-psf_im = zeros((npixels+psf_pixels)*scaling, (npixels+psf_pixels)*scaling);
+psf_im = zeros((npixels+psf_pixels+2)*scaling, (npixels+psf_pixels+2)*scaling);
 
 %set equal to image from previous reconstruction
 total_image = prev_image;
@@ -21,14 +21,14 @@ ys_psf = locations(:,2);
 for i = 1:size(locations,1)   
 
 %put the psf block at right place in image +psf_pixels to ensure the safety edge
-psf_im((round(xs_psf(i)*scaling))+1:(round(xs_psf(i)*scaling)+(psf_pixels)),...
-    (round(ys_psf(i)*scaling))+1:(round(ys_psf(i)*scaling)+(psf_pixels))) = psf_block;
+psf_im((round((xs_psf(i)+1)*scaling)+1):(round((xs_psf(i)+1)*scaling)+(psf_pixels)),...
+    (round((ys_psf(i)+1)*scaling)+1):(round((ys_psf(i)+1)*scaling)+(psf_pixels))) = psf_block;
 
 %total picture is formed
 total_image = total_image + psf_im;
 
 %clean sheet for new molecule
-psf_im = zeros((npixels+psf_pixels)*scaling, (npixels+psf_pixels)*scaling);
+psf_im = zeros((npixels+psf_pixels+2)*scaling, (npixels+psf_pixels+2)*scaling);
 
 end
 

@@ -3,22 +3,21 @@ tic
 
 % Constants
 im_px       = 100;      %[nm] Pixel size of frames
-rec_px      = 10;       %[nm] pixel size of reconstructed image
+rec_px      = 5;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
-%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
+%dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\ER2.N3.HD\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\poitions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
+%GtLoc       = 'C:\Users\Egon Beyne\Downloads\poitions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  = 7;               %size of psf_block
+psf_pixels  = 9;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
-
 %init reconstruction, makes psf block                                        
-psf_block = init_reconstruct(rec_px);
+% psf_block = init_reconstruct(rec_px);
 
 warning('off', 'all');
 
@@ -41,8 +40,6 @@ acc     = zeros(Nfiles, 5);
 
 % Array to store localizations
 loc_mol = zeros(20000, 3);
-
-
 
 for iter = 1:Nfiles
 
@@ -96,7 +93,7 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,dx);
 
     % Print progress
     prog = int16(iter/Nfiles*100);
@@ -109,7 +106,7 @@ end
 %%%%%%%%
 figure(1)
 axis equal
-imshow(tot_im*60,hot(25))
+imshow(tot_im*100,hot(60))
 hold on
 scalebar(tot_im,rec_px,1000,'nm')
 
@@ -177,36 +174,36 @@ for i = 1:Nfiles
     end
 end
 
-% Compute the accuracy
-%comp = mean(acc(:, 5));            % When using eye dataset
-comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
-
-% Cramer-Rao Lower bound, without zeros
-CRLB = nonzeros(acc(:, 2));
-
-% number of signal photons 
-N_ph = nonzeros(acc(:, 4));
-
-figure(2)
-subplot(221)
-histogram(nonzeros(N_on))
-ylabel("Frequency")
-xlabel("# of frames on")
-title("Number of frames fluorophore is on")
-subplot(222)
-histogram(CRLB)
-ylabel("Frequency")
-xlabel("Cramer-Rao bound [nm]")
-title("Cramer-Rao lower bound")
-xlim([0, 15])
-subplot(223)
-histogram((CRLB/comp).^-1)
-title("Cramer-Rao Bound scaled with accuracy")
-subplot(224)
-histogram(N_ph, 'NumBins', 10)
-ylabel("Frequency")
-xlabel("Number of signal photons")
-title("Signal photons per fluorophore")
+% % Compute the accuracy
+% comp = mean(acc(:, 5));            % When using eye dataset
+% comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
+% 
+% % Cramer-Rao Lower bound, without zeros
+ CRLB = nonzeros(acc(:, 2));
+% 
+% % number of signal photons 
+ N_ph = nonzeros(acc(:, 4));
+% 
+% figure(2)
+% subplot(221)
+% histogram(nonzeros(N_on))
+% ylabel("Frequency")
+% xlabel("# of frames on")
+% title("Number of frames fluorophore is on")
+% subplot(222)
+% histogram(CRLB)
+% ylabel("Frequency")
+% xlabel("Cramer-Rao bound [nm]")
+% title("Cramer-Rao lower bound")
+% xlim([0, 15])
+% subplot(223)
+% histogram((CRLB/comp).^-1)
+% title("Cramer-Rao Bound scaled with accuracy")
+% subplot(224)
+% histogram(N_ph, 'NumBins', 10)
+% ylabel("Frequency")
+% xlabel("Number of signal photons")
+% title("Signal photons per fluorophore")
   
 % Execution time
 toc
@@ -543,5 +540,3 @@ imageData = double(read(t));
 close(t);
 
 end
-
-

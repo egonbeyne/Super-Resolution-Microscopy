@@ -1,15 +1,21 @@
 clear all;
 tic
 
-% Constants
-im_px       = 100;      %[nm] Pixel size of frames
+%%%%%%% To be adjusted based on dataset used %%%%%%%%
+im_px       = 150;      %[nm] Pixel size of frames
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';%ER2.N3.HD
+%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
+%GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
+offset      = 0;
+gain        = 1;
+
+
+% Other onstants
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ER2.N3.HD\';
-%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
@@ -47,7 +53,7 @@ loc_mol = zeros(20000, 3);
 for iter = 1:Nfiles
 
     % Open the image
-    imageData = OpenIm(dataLoc, iter);
+    imageData = (OpenIm(dataLoc, iter)-offset)/gain;
 
     % Segmenting the data
     centroids = segment_frame(imageData, im_px);
@@ -80,11 +86,12 @@ for iter = 1:Nfiles
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
+    N     = mean(localizations(:, 6));% - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
     % if N is negative, take the average one from previous localizations
     %mean(localizations(:, 6))
     
     if N<0
+        mean(localizations(:, 6))/mean(localizations(:, 7));
         N = mean(nonzeros(acc(:, 4)));
         %disp("ok")
         %imshow(uint16(imageData)*10)
@@ -92,7 +99,7 @@ for iter = 1:Nfiles
         %plot(loc
     end
     
-    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % nm] width of blob converted to nm
+    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % [nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
     
@@ -100,8 +107,8 @@ for iter = 1:Nfiles
     dx   = max(sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9, 0.1);
     
     
-    %[comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
-    comp1 = 1;
+    [comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
+    %comp1 = 1;
     
     % Store some statistics
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
@@ -188,8 +195,8 @@ for i = 1:Nfiles
 end
 
 % Compute the accuracy
-%comp = mean(acc(:, 5));            % When using eye dataset
-comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
+comp = mean(acc(:, 5));            % When using eye dataset
+%comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
 
 % Cramer-Rao Lower bound, without zeros
 CRLB = nonzeros(acc(:, 2));
@@ -383,7 +390,7 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     
     % If the fitting produces an ill conditioned matrix, or the fluorophore
     % is not bright enough, stop iteration
-    if strcmp(msgid, 'MATLAB:illConditionedMatrix') || Iin<numel(localData)*150
+    if strcmp(msgid, 'MATLAB:illConditionedMatrix') %|| Iin<numel(localData)*150
         if strcmp(msgid,'MATLAB:illConditionedMatrix')
             % Reset the warning
             lastwarn(['','']);

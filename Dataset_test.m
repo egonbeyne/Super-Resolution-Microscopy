@@ -13,12 +13,12 @@ GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';%'C:\Users\Egon Beyn
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  = 7;               %size of psf_block
+psf_pixels  = 9;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
 
 %init reconstruction, makes psf block                                        
-psf_block = init_reconstruct(rec_px);
+% psf_block = init_reconstruct(rec_px);
 
 warning('off', 'all');
 
@@ -47,7 +47,7 @@ loc_mol = zeros(20000, 3);
 for iter = 1:Nfiles
 
     % Open the image
-    imageData = (OpenIm(dataLoc, iter)-100)/6;
+    imageData = OpenIm(dataLoc, iter);
 
     % Segmenting the data
     centroids = segment_frame(imageData, im_px);
@@ -96,7 +96,7 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,dx);
 
     % Print progress
     prog = int16(iter/Nfiles*100);
@@ -109,7 +109,7 @@ end
 %%%%%%%%
 figure(1)
 axis equal
-imshow(tot_im*60,hot(25))
+imshow(tot_im*100,hot(60))
 hold on
 scalebar(tot_im,rec_px,1000,'nm')
 

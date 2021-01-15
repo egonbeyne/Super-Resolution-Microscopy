@@ -6,7 +6,7 @@ im_px       = 100;      %[nm] Pixel size of frames
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ER2.N3.HD\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
 GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
@@ -82,12 +82,17 @@ for iter = 1:Nfiles
     
     % Cramer-Rao lower bound calculation
     N     = mean(localizations(:, 6)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
+    % if N is negative, take the average one from previous localizations
+    if N<0
+        N = mean(nonzeros(acc(:, 4)));
+    end
     sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
     
     % Cramer rao lower bound
-    dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
+    dx   = max(sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9, 0.1);
+    
     
     %[comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
     comp1 = 1;
@@ -185,7 +190,7 @@ CRLB = nonzeros(acc(:, 2));
 
 % number of signal photons 
 N_ph = nonzeros(acc(:, 4));
-
+%{
 figure(2)
 subplot(221)
 histogram(nonzeros(N_on))
@@ -206,7 +211,7 @@ histogram(N_ph, 'NumBins', 10)
 ylabel("Frequency")
 xlabel("Number of signal photons")
 title("Signal photons per fluorophore")
-  
+%}
 % Execution time
 toc
 

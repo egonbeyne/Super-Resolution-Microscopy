@@ -9,7 +9,7 @@ ysize       = 5;        %[px] size of fitting region in y
 dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\poitions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
@@ -47,7 +47,7 @@ loc_mol = zeros(20000, 3);
 for iter = 1:Nfiles
 
     % Open the image
-    imageData = OpenIm(dataLoc, iter);
+    imageData = (OpenIm(dataLoc, iter)-100)/6;
 
     % Segmenting the data
     centroids = segment_frame(imageData, im_px);
@@ -116,7 +116,6 @@ scalebar(tot_im,rec_px,1000,'nm')
 %%%%%%%%
 % remove zero elements from the molecule locations
 loc_mol(loc_mol(:, 1) == 0, :) = [];
-
 
 % Progress report
 disp("Checking for double localizations... ")
@@ -373,8 +372,7 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     
     % If the fitting produces an ill conditioned matrix, or the fluorophore
     % is not bright enough, stop iteration
-    if strcmp(msgid,'MATLAB:illConditionedMatrix') || Iin<numel(localData)*8
-        
+    if strcmp(msgid, 'MATLAB:illConditionedMatrix') || Iin<numel(localData)*150
         if strcmp(msgid,'MATLAB:illConditionedMatrix')
             % Reset the warning
             lastwarn(['','']);
@@ -385,10 +383,6 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
         B = [NaN;NaN;NaN;NaN;NaN];
         break
     end
-    
-    
-    
-       
 end
     if it==maxIt
         disp('itmax reached')
@@ -399,24 +393,7 @@ end
     sg  = B(3);
     b   = B(5);
     Int = B(4);
-    %{
-    if sqrt((B(1) - xin)^2 + (B(2) - yin)^2)>1
-        figure(1)
-        imshow(uint16(localData)*30, 'InitialMagnification', 800);
-        hold on
-        axis on
-        plot(xin, yin, 'r+')
-        plot(B(1), B(2), 'bx')
-        Iin
-        numel(localData)*150
-        figure(2)
-        imshow(uint16(imageData)*30);
-        hold on
-        axis on
-        plot(centroids(:,1), centroids(:,2), 'r+')
-        pause(5)
-    end
-    %}
+    
     localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     
     

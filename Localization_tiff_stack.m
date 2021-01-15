@@ -83,18 +83,21 @@ for iter = 1:Nfiles
         
     % Store localizations, also add the frame number
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
-    localizations(:, 4);
+    
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 7)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
-    sigg  = mean(localizations(:, 3))*im_px*10^-9;                         % nm] width of blob converted to nm
+    N     = mean(localizations(:, 6)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
+    
+    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
-    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));  % [-] Dimensionless background parameter
+    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
+    
     
     % Cramer rao lower bound
     dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
     
     %[comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
     comp1 = 1;
+    
     % Store some statistics
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     

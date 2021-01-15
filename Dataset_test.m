@@ -6,14 +6,14 @@ im_px       = 100;      %[nm] Pixel size of frames
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ER2.N3.HD\';
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ER2.N3.HD\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
 Nfiles      = length( dir(dataLoc)) - 2;
 GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';%'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  = 9;               %size of psf_block
+psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
 
@@ -70,7 +70,6 @@ for iter = 1:Nfiles
     % Total number of localizations
     Nloc = nnz(loc_mol(:, 3));
     
-    
     % Remove zeros from localization
     localizations(~any(localizations,2), :) = [];
    
@@ -83,9 +82,16 @@ for iter = 1:Nfiles
     % Cramer-Rao lower bound calculation
     N     = mean(localizations(:, 6)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
     % if N is negative, take the average one from previous localizations
+    %mean(localizations(:, 6))
+    
     if N<0
         N = mean(nonzeros(acc(:, 4)));
+        %disp("ok")
+        %imshow(uint16(imageData)*10)
+        %hold on
+        %plot(loc
     end
+    
     sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter

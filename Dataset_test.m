@@ -2,9 +2,9 @@ clear all;
 tic
 
 %%%%%%% To be adjusted based on dataset used %%%%%%%%
-im_px       = 150;      %[nm] Pixel size of frames
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';%ER2.N3.HD
-%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
+im_px       = 100;      %[nm] Pixel size of frames
+%dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';%ER2.N3.HD
+dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\ER2.N3.HD\';
 %GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 offset      = 0;
@@ -19,7 +19,7 @@ Nfiles      = length( dir(dataLoc)) - 2;
 resolution  = size(OpenIm(dataLoc, 1));
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
-psf_pixels  = 7;               %size of psf_block
+psf_pixels  = 9;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
 
@@ -107,11 +107,11 @@ for iter = 1:Nfiles
     dx   = max(sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9, 0.1);
     
     
-    [comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
+%     [comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
     %comp1 = 1;
     
     % Store some statistics
-    acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
+%     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     
     % Add the localization data to the reconstructed image
     tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,dx);
@@ -127,7 +127,7 @@ end
 %%%%%%%%
 figure(1)
 axis equal
-imshow(tot_im*100,hot(60))
+imshow(tot_im*300/rec_px,hot(80))
 hold on
 scalebar(tot_im,rec_px,1000,'nm')
 
@@ -538,5 +538,3 @@ imageData = double(read(t));
 close(t);
 
 end
-
-

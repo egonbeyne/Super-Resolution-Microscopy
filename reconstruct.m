@@ -21,12 +21,12 @@ xi_psf = d_psf(:, 1);
 yi_psf = d_psf(:, 2);
 
 dx = abs(dx);
-LB = 0.3; %to set a minimum for dx
+LB = 0.6; %to set a minimum for dx
 if (dx < LB)
     dx = LB;
 end
 
-psf = PSF(((psf_pixels+1)/2),((psf_pixels+1)/2),dx*10/newpixelsize,1,0,xi_psf,yi_psf);
+psf = PSF(((psf_pixels+1)/2),((psf_pixels+1)/2),dx*5/newpixelsize,1,0,xi_psf,yi_psf);
 psf_block = reshape(psf,[psf_pixels,psf_pixels]);
 
 function [out] = PSF(xs, ys, sg, int, b, x, y)

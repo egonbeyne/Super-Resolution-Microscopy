@@ -1,29 +1,37 @@
 clear all;
 tic
 
-% Constants
-im_px       = 100;      %[nm] Pixel size of frames
-rec_px      = 5;       %[nm] pixel size of reconstructed image
+clear all;
+tic
+
+%%%%%%% To be adjusted based on dataset used %%%%%%%%
+im_px       = 65;      %[nm] Pixel size of frames
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\data_5000.tif';%ER2.N3.HD
+%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
+%GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+%GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
+offset      = 100;
+gain        = 4;
+driftLoc    = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\drift_pixelunits.txt';
+
+
+% Other onstants
+rec_px      = 6.5;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\tubulin2D.tif';
-%dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
-%Nfiles      = length( dir(dataLoc)) - 2;
 tiff_info   = imfinfo(dataLoc); % return tiff structure, one element per image
-tiff_stack  = imread(dataLoc, 1) ; % read in first image
+tiff_stack  = imread(dataLoc, 1); % read in first image
 Nfiles      = size(tiff_info, 1);
 resolution  = size(tiff_stack);
-GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
 nxpixels    = resolution(2);   % number of pixels in x direction
 nypixels    = resolution(1);   % number of pixels in y direction
 psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
-gain        = 0.5;
-offset      = 30;
+
 
 
 %init reconstruction, makes psf block                                        
-psf_block = init_reconstruct(rec_px);
+%psf_block = init_reconstruct(rec_px);
 
 warning('off', 'all');
 
@@ -47,6 +55,9 @@ acc     = zeros(Nfiles, 5);
 % Array to store localizations
 loc_mol = zeros(20000, 3);
 
+% Read drift
+s=importdata(driftLoc);
+drift=s.data;
 
 for iter = 1:Nfiles
 
@@ -82,18 +93,16 @@ for iter = 1:Nfiles
     Nfr  = size(localizations, 1);
         
     % Store localizations, also add the frame number
-    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
+    loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px - drift(iter, :), iter*ones(Nfr, 1)];
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6)) - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
-    
-    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % nm] width of blob converted to nm
+    N     = mean(localizations(:, 6));% - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons    
+    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % [nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
     
-    
     % Cramer rao lower bound
-    dx   = sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9;
+    dx   = max(sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9, 0.1);
     
     %[comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
     comp1 = 1;
@@ -102,7 +111,7 @@ for iter = 1:Nfiles
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
     
     % Add the localization data to the reconstructed image
-    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels,psf_block);
+    tot_im = reconstruct(tot_im, localizations, im_px, rec_px, nxpixels, dx);
 
     % Print progress
     prog = int16(iter/Nfiles*100);
@@ -185,7 +194,7 @@ end
 
 % Compute the accuracy
 %comp = mean(acc(:, 5));            % When using eye dataset
-comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
+%comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
 
 % Cramer-Rao Lower bound, without zeros
 CRLB = nonzeros(acc(:, 2));

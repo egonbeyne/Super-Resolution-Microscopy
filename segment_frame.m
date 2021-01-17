@@ -1,7 +1,7 @@
 function [centroids] = segment_frame(imageData,oldpixelsize)
 
 b = 1200/oldpixelsize;  %block size in pixels for removing noise
-gauss_sigma = 70/oldpixelsize;
+gauss_sigma = 100/oldpixelsize;
 
 %Removing the median value locally on a [b x b] grid for noise elimination
 fun = @(block_struct) block_struct.data - median(block_struct.data(:));

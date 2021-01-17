@@ -86,19 +86,7 @@ for iter = 1:Nfiles
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6));% - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons
-    % if N is negative, take the average one from previous localizations
-    %mean(localizations(:, 6))
-    
-    if N<0
-        mean(localizations(:, 6))/mean(localizations(:, 7));
-        N = mean(nonzeros(acc(:, 4)));
-        %disp("ok")
-        %imshow(uint16(imageData)*10)
-        %hold on
-        %plot(loc
-    end
-    
+    N     = mean(localizations(:, 6));% - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons    
     sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % [nm] width of blob converted to nm
     sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
     tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
@@ -271,8 +259,8 @@ for i = 1:L(1)
 
     % Calculating the weights (assuming poissoning noise, based on
     % (Jiaqing,2016))
-    w = max(I.^-1, .0001);
-
+    w = max(I.^-1, .00001);
+    
     fi = Ii(:);
 
 % Initial guesses for x and y
@@ -302,8 +290,6 @@ it = 0;
 L_o     = 2;
 v       = 1.5;
 h       = 0.1;
-up      = 20;
-down    = 5;
 L_0 = 4;
 alpha = 0.1;
 while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt

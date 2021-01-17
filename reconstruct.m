@@ -4,7 +4,7 @@
 function [total_image] = reconstruct(prev_image,locations,oldpixelsize,newpixelsize,npixels,dx)
 
 scaling = oldpixelsize/newpixelsize;
-psf_pixels = 9;
+psf_pixels = 7;
 xsize_psf = psf_pixels;
 ysize_psf = psf_pixels;
 

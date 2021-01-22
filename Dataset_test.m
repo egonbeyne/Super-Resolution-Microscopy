@@ -2,16 +2,19 @@ clear all;
 tic
 
 %%%%%%% To be adjusted based on dataset used %%%%%%%%
-im_px       = 150;      %[nm] Pixel size of frames
-dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence\';%ER2.N3.HD
+im_px       = 100;      %[nm] Pixel size of frames
+dataLoc     = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\sequence_3\';
 %dataLoc     = 'C:\Users\kaan_\EE\minor\Final project\matlab code\data\tubuli2\';
-%GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
-GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
+GtLoc       = 'C:\Users\Egon Beyne\Downloads\positions.csv';
+%GtLoc       = 'C:\Users\Egon Beyne\Desktop\Super-Resolution Microscopy\Data\ground-truth\';
 offset      = 0;
-gain        = 1;
-
+gain        = 6;
+NA          = 1.49;      % Numerical aperture
+wl          = 660;      % Wavelength
 
 % Other onstants
+dif_lim     = wl/(2*NA);        %[nm] Diffraction limit ~= FWHM
+sigg        = dif_lim/2.355;    %[nm] FHWM converted to sigma of psf
 rec_px      = 10;       %[nm] pixel size of reconstructed image
 xsize       = 5;        %[px] size of fitting region in x
 ysize       = 5;        %[px] size of fitting region in y
@@ -22,17 +25,12 @@ nypixels    = resolution(1);   % number of pixels in y direction
 psf_pixels  = 7;               %size of psf_block
 last_prog   = -1;              % Progress indicator
 
-
-%init reconstruction, makes psf block                                        
-% psf_block = init_reconstruct(rec_px);
-
 warning('off', 'all');
 
 % Making a point spread function
 psf = @(xs, ys, sg, int, b, x, y)((int/(2*pi*(sg^2)))*exp(-((x-xs).^2 + (y-ys).^2)/(2*(sg^2)))+b); 
 
-
-% Convert derivatives to normal functions for speed
+% Derivatives of the psf
 dfdxs = @(xs, ys, sg, int, b, x, y)(int*exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2)).*(2*x - 2*xs))/(4*sg^4*pi);
 dfdys = @(xs, ys, sg, int, b, x, y)(int*exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2)).*(2*y - 2*ys))/(4*sg^4*pi);
 dfdsg = @(xs, ys, sg, int, b, x, y)((int*exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2)).*((x - xs).^2 + (y - ys).^2))/(2*sg^5*pi) - (int*exp(-((x - xs).^2 + (y - ys).^2)/(2*sg^2))./(sg^3*pi)));
@@ -48,8 +46,6 @@ acc     = zeros(Nfiles, 5);
 % Array to store localizations
 loc_mol = zeros(20000, 3);
 
-
-
 for iter = 1:Nfiles
 
     % Open the image
@@ -60,13 +56,11 @@ for iter = 1:Nfiles
 
     % Skip current loop iteration if no molecules are present
     if sum(isnan(centroids), 'all')>0 || size(centroids, 1) == 0
-        %imshow(10*uint16(imageData))
-        %error('stop')
         continue
     end
 
     % Localization
-    localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, dfdxs, dfdys, dfdsg, dfdin, psf, resolution);
+    localizations = Fit_Gaussian(centroids, imageData, xsize, ysize, iter, dfdxs, dfdys, dfdsg, dfdin, psf, resolution, sigg, im_px);
     
     % Stop current iteration if no localizations are present
     if size(localizations, 1)==0
@@ -86,17 +80,20 @@ for iter = 1:Nfiles
     loc_mol((Nloc+1):(Nloc+Nfr), 1:3) = [localizations(:, 1:2)*im_px, iter*ones(Nfr, 1)];
     
     % Cramer-Rao lower bound calculation
-    N     = mean(localizations(:, 6));% - (mean(localizations(:, 4))*xsize*ysize);      % [-] Number of signal photons    
-    sigg  = mean(localizations(:, 3))*im_px*10^-9;                                    % [nm] width of blob converted to nm
-    sige2 = (sigg^2) + (((im_px*10^-9)^2)/12);                          
-    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));             % [-] Dimensionless background parameter
+    N     = mean(localizations(:, 6));                                      % [-] Number of signal photons    
+    sig   = mean(localizations(:, 3))*im_px*10^-9;                          % [nm] width of blob converted to nm
+    sige2 = (sig^2) + (((im_px*10^-9)^2)/12);                          
+    tau   = 2*pi*(sige2)*mean(localizations(:, 4))/(N*((im_px*10^-9)^2));   % [-] Dimensionless background parameter
     
     % Cramer rao lower bound
     dx   = max(sqrt(sige2*(1 + (4*tau) + sqrt(2*tau/(1 + (4*tau))))/N)/1e-9, 0.1);
     
+    % Comparing with ground ground-truth
+    % Use this line if ground truth is provided per frame
+    %[comp1, missed, Nmol, dist] = groundtruth(localizations(:, 1:2), GtLoc, iter); 
     
-    [comp1, missed, Nmol] = groundtruth(localizations, GtLoc, iter);
-    %comp1 = 1;
+    % Use this line if ground truth is provided as one file
+    comp1 = 1;          
     
     % Store some statistics
     acc(iter, :) = [iter, dx, mean(localizations(:, 3)), N, comp1];
@@ -119,7 +116,6 @@ imshow(tot_im*100,hot(60))
 hold on
 scalebar(tot_im,rec_px,1000,'nm')
 
-%%%%%%%%
 % remove zero elements from the molecule locations
 loc_mol(loc_mol(:, 1) == 0, :) = [];
 
@@ -134,16 +130,16 @@ Ndoubleframes = 10;
 N_on          = zeros(Nloc, 1);
 
 % Threshold to consider 2 localization from the same molecule (in nm)
-thr           = 5;
+thr           = 10;
 
 % Loop through all frames
 for i = 1:Nfiles
     % Select localization of 1 frame, to check with 10 consecutive frames
     local = loc_mol(loc_mol(:, 3) == i, :);
-    %i
+    
     % Loop through all localizations in the selected frame
     for j = 1:size(local, 1)
-        %j
+        
         % array to attach doubles to
         doubles = local(j, 1:2);  
         
@@ -177,47 +173,34 @@ for i = 1:Nfiles
         t_on    = size(doubles, 1);
         N_on(i) = t_on;
         
-        % replace with average
+        % replace with average in local frame
         local(j, 1:2) = avg_loc;
     end
+    
+    % Replace checked frame with frame with averaged doubles
+    loc_mol(loc_mol(:, 3) == i, :) = local;
 end
 
+% Remove zeros again
+loc_mol(loc_mol(:, 1) == 0, :) = [];
+
 % Compute the accuracy
-comp = mean(acc(:, 5));            % When using eye dataset
-%comp = groundtruth_combined(loc_mol, GtLoc);    % For other dataset
+%comp = mean(acc(:, 5));                                 % For ground truth per frame
+comp = groundtruth_combined(loc_mol, GtLoc);     % For ground truth in one frame
 
 % Cramer-Rao Lower bound, without zeros
-CRLB = nonzeros(acc(:, 2));
+CRLB = mean(nonzeros(acc(:, 2)));
 
-% number of signal photons 
-N_ph = nonzeros(acc(:, 4));
-%{
-figure(2)
-subplot(221)
-histogram(nonzeros(N_on))
-ylabel("Frequency")
-xlabel("# of frames on")
-title("Number of frames fluorophore is on")
-subplot(222)
-histogram(CRLB)
-ylabel("Frequency")
-xlabel("Cramer-Rao bound [nm]")
-title("Cramer-Rao lower bound")
-xlim([0, 15])
-subplot(223)
-histogram((CRLB/comp).^-1)
-title("Cramer-Rao Bound scaled with accuracy")
-subplot(224)
-histogram(N_ph, 'NumBins', 10)
-ylabel("Frequency")
-xlabel("Number of signal photons")
-title("Signal photons per fluorophore")
-%}
+% Print results
+disp("accuracy =              " + string(comp))
+disp("Cramér-Rao Lower Bound =" + string(CRLB))
+
+
 % Execution time
 toc
 
 function [localizations] = Fit_Gaussian(centroids, imageData, xsize, ysize, iter,...
-    dfdxs, dfdys, dfdsg, dfdin, psf, resolution)
+    dfdxs, dfdys, dfdsg, dfdin, psf, resolution, sigg, im_px)
 
 X = linspace(1, xsize, xsize);
 Y = linspace(1, ysize, ysize);
@@ -276,22 +259,21 @@ Iin = sum(localData, 'all');
 bin = sum(imageData, 'all')/(resolution(1)*resolution(2)*1.5);
 
 % Initial guess for function parameters
-B     = [xin; yin; 1; Iin; bin];
+B     = [xin; yin; sigg/im_px; Iin; bin];
 
 % x and y step size to start up iterations (exaggerated)
 step = [4, 4];
 
 % Maximum number of iterations
-maxIt = 500;
+maxIt   = 400;
+it      = 0;
 
-it = 0;
+% Damping for levenberg marquardt 
+v       = 1.5;          % Factor to modify damping
+h       = 0.1;          % Step size for finite difference calculation
+L_0     = 4;            % Damping
+alpha   = 0.5;          % Threshold to accept geodesic acceleration term
 
-% Damping for levenberg marquardt (Has to be tuned)
-L_o     = 2;
-v       = 1.5;
-h       = 0.1;
-L_0 = 4;
-alpha = 0.1;
 while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
 
     % Counting iterations
@@ -325,14 +307,13 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     res = JT*W*(fi - f);
     jtj = JT*W*J;
     
-    % Damping matrix according to 'Improvements to the Levenberg-Marquardt algorithm for nonlinear
-    %least-squares minimization'
+    % Damping matrix
     dtd = eye(5).*diag(jtj);
 
     % Calculate the step size
     step = linsolve((jtj + L_0*dtd),res);
     
-    %%%% Geodesic %%%%
+    % Geodesic acceleration
     Bs   = B +  h*step;
     fs   = psf(Bs(1), Bs(2), Bs(3), Bs(4), Bs(5), xi, yi);
     
@@ -345,7 +326,7 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     if 2*norm(ag)/norm(step)<= alpha
         step = step + 0.5*ag;
     end
-    %%%%%%%%%%%%%%%%%%
+    
     
     % Update function parameters
     Bn  = B + step;
@@ -353,57 +334,55 @@ while (step(1)^2 + step(2)^2)>1e-8 && it<maxIt
     % Function value at new point
     fh = psf(Bn(1), Bn(2), Bn(3), Bn(4), Bn(5), xi, yi);
     
+    % Normalized evaluation of the new estimate
     chi     = fi.'*W*fi  -  2*fi.'*W*f  +  f.'*W*f;
     chid    = fi.'*W*fi  -  2*fi.'*W*fh  +  fh.'*W*fh;
     rho     = (chi - chid)/(step.'*((L_0*dtd*step) + (JT*W*(fi - f))));
     
     % Use new parameters if the least squares improved
     if rho>=0.5
+        % Accept new guess
         B = Bn;
-        L_0 = L_0*max(0.333, 1 - (2*rho - 1)^3);%max(L_0/down, 1e-7);
+        L_0 = L_0*max(0.333, 1 - (2*rho - 1)^3);
         v   = 2;
-        %disp("better")
     else
-        
-        L_0 = v*L_0;%min(L_0*up, 1e7);
+        % Reject new guess
+        L_0 = v*L_0;
         v   = 2*v;
-        %disp("worse")
     end
     
     
     % Check if any warnings are given
     [~, msgid] = lastwarn;
     
-    % If the fitting produces an ill conditioned matrix, or the fluorophore
-    % is not bright enough, stop iteration
-    if strcmp(msgid, 'MATLAB:illConditionedMatrix') %|| Iin<numel(localData)*150
-        if strcmp(msgid,'MATLAB:illConditionedMatrix')
-            % Reset the warning
-            lastwarn(['','']);
-            disp('ill conditioned matrix')
-        else
-            disp('too dim')
-        end
+    % If the fitting produces an ill conditioned matrix stop iteration
+    if strcmp(msgid, 'MATLAB:illConditionedMatrix')
+        
+        % Reset the warning
+        lastwarn(['','']);
+        disp('ill conditioned matrix')
+        
+        % Make datapoint invalid, will be removed after loop
         B = [NaN;NaN;NaN;NaN;NaN];
+        
+        % stop iteration
         break
     end
 end
-    if it==maxIt
-        disp('itmax reached')
-    end
-    
+
     xs  = B(1) + roi(1) - 0.5; % -0.5 is necessary because pixel count starts at one in the local frame
     ys  = B(2) + roi(2) - 0.5; % and because the center of a pixel is where the count starts
     sg  = B(3);
     b   = B(5);
     Int = B(4);
     
-    localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     
+    localizations(i, :) = [xs, ys, sg, b, iter, Int, Iin];
     
 end
 
-% Remove diverged fittings
+
+% Remove fittings too far outside the frame
 localizations((localizations(:, 1) <= -1)|(localizations(:, 2) <=-1), :) = [];
 localizations((localizations(:, 1) >= resolution(2)+1)|(localizations(:, 2) >=resolution(1)+1), :) = [];
 
@@ -412,7 +391,6 @@ localizations(localizations(:, 4)<0, :) = [];
 localizations(localizations(:, 6)<0, :) = [];
 localizations(sum(isnan(localizations), 2)>0, :) = [];
 
-
 end
 
 
@@ -420,6 +398,9 @@ function comp = groundtruth_combined(loc_mol, groundtruth_loc)
 
 % Open and read the csv file containing ground truth data
 gt = readmatrix(groundtruth_loc);
+
+% Remove fluorophores too far away from the focal plane
+gt(abs(gt(:, 3))>500, :) = [];
 
 % Array to store localization errors
 C      = zeros(size(gt, 1), 1);
@@ -433,7 +414,7 @@ for k=1:size(gt, 1)
   [val,idx] = min(sqrt(sum((gt(:, 1:2)-loc_mol(k, 1:2)).^2, 2)));
   
   % Store the error
-  C(k)=val;
+  C(k) = val;
   
   % Remove entry from ground truth
   gt(idx, :)=[];
@@ -442,11 +423,14 @@ end
 % Trim zero values
 C(~any(C), :) = [];
 
+% Remove outliers due to diverged fits
+C = rmoutliers(C, 'median');
 % Compute the average accuracy, excluding outliers
-comp = trimmean(C, 99.5);
+comp = mean(C);
+
 end
 
-function [comp, missed, Nmol] = groundtruth(localizations, groundtruth_loc, iter)
+function [comp, missed, Nmol, dist] = groundtruth(localizations, groundtruth_loc, iter)
 
 % Format the iteration number to match the name of the data
 num_gt  = '00000';
@@ -500,11 +484,11 @@ end
 % Calculate the squared error
 rsq  = (sort - loc).^2;
 
-L_rsq = size(rsq);
+% Distance between ground truth and localizations
+dist = sort - loc;
 
 % Compute the mean squared error
-comp = norm(sum(sqrt(rsq))/L_rsq(1));
-
+comp = mean(sqrt(sum(rsq, 2)));
 
 end
 
